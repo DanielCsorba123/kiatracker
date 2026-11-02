@@ -36,6 +36,7 @@ from kiatracker.silver import load_readings
 from kiatracker.weather import DriveWeather, load_weather, weather_for_drive
 
 DEFAULT_CAPACITY_KWH = 81.4  # EV3 Long Range, used only if no reading reports it
+INSERT_BATCH = 500
 LOCAL_TZ = ZoneInfo("Europe/Budapest")
 SQL_TYPES = {datetime: "TIMESTAMP", float: "DOUBLE", int: "BIGINT", bool: "BOOLEAN", str: "VARCHAR"}
 
@@ -56,12 +57,11 @@ def write_table(con: duckdb.DuckDBPyConnection, name: str, cls: type, rows: list
     hints = typing.get_type_hints(cls)
     fields = [f.name for f in dataclasses.fields(cls)]
     con.execute(f"create table {name} ({', '.join(f'"{f}" {sql_type(hints[f])}' for f in fields)})")
-    if rows:
-        placeholders = ", ".join("?" for _ in fields)
-        con.executemany(
-            f"insert into {name} values ({placeholders})",
-            [[to_sql(getattr(row, f)) for f in fields] for row in rows],
-        )
+    row_sql = "(" + ", ".join("?" for _ in fields) + ")"
+    for i in range(0, len(rows), INSERT_BATCH):  # multi-row inserts: executemany is row by row
+        batch = rows[i : i + INSERT_BATCH]
+        params = [to_sql(getattr(row, f)) for row in batch for f in fields]
+        con.execute(f"insert into {name} values {', '.join([row_sql] * len(batch))}", params)
     return len(rows)
 
 

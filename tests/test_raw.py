@@ -52,3 +52,11 @@ def test_record_after_truncated_line_is_kept(tmp_path):
         f.write('{"n": 2, "bo')  # power cut mid-write
     append_record(tmp_path, "snapshots", {"n": 3}, now=NOV)
     assert [r["n"] for r in read_records(tmp_path, "snapshots")] == [1, 3]
+
+
+def test_append_records_batches_by_month(tmp_path):
+    from kiatracker.raw import append_records
+
+    append_records(tmp_path, "weather", [(NOV, {"n": 1}), (DEC, {"n": 2}), (NOV, {"n": 3})])
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["weather-2026-11.jsonl", "weather-2026-12.jsonl"]
+    assert [r["n"] for r in read_records(tmp_path, "weather")] == [1, 3, 2]

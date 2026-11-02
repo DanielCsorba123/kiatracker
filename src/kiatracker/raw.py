@@ -19,6 +19,20 @@ def append_record(raw_dir: Path, kind: str, record: dict, now: datetime) -> Path
     return path
 
 
+def append_records(raw_dir: Path, kind: str, records: list[tuple[datetime, dict]]) -> None:
+    """Append many (time, record) pairs, opening each monthly file once."""
+    by_month: dict[str, list[dict]] = {}
+    for now, record in records:
+        by_month.setdefault(f"{now:%Y-%m}", []).append(record)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    for month, batch in by_month.items():
+        path = raw_dir / f"{kind}-{month}.jsonl"
+        with path.open("ab") as f:
+            if f.tell() and not ends_with_newline(path):
+                f.write(b"\n")
+            f.write("".join(json.dumps(r) + "\n" for r in batch).encode("utf-8"))
+
+
 def ends_with_newline(path: Path) -> bool:
     with path.open("rb") as f:
         f.seek(-1, 2)
