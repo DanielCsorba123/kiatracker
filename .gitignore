@@ -1,0 +1,13 @@
+# Secrets: never commit
+.env
+.env.*
+!.env.example
+
+# Personal vehicle data (VIN, GPS, trips)
+data/
+spikes/probe_output/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
