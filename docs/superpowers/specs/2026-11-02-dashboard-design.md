@@ -8,7 +8,7 @@ A local web dashboard over the data foundation's DuckDB file that answers: how f
 
 ## 2. Privacy model (the binding constraint)
 
-1. **Two data sources, chosen at start-up, never mixed.** *Personal* mode reads `data/kiatracker.duckdb`. *Demo* mode generates its own database from `kiatracker.synthetic` into a temporary folder. When the environment variable `KIATRACKER_DEMO=1` is set (how any public deployment runs), the app can only use demo mode; there is no switch in the UI to reach personal data.
+1. **Two data sources, chosen at start-up, never mixed; fail closed.** *Demo* mode (the default) generates its own database from `kiatracker.synthetic` into a new private temporary folder. *Personal* mode reads `data/kiatracker.duckdb` and needs an explicit `KIATRACKER_PERSONAL=1`, which only `kiatracker dashboard` sets; it refuses to run unless the server listens on this computer only. `KIATRACKER_DEMO` (any value but 0/false/empty) always forces demo mode. There is no switch in the UI to reach personal data. (Revised after review: the first version defaulted to personal data.)
 2. **No coordinates leave the query layer.** Query functions select zones (`home` / `other`), never latitude, longitude or VIN. A test asserts that no returned frame has a coordinate column. There is no map in this version.
 3. **Local only by default.** `kiatracker dashboard` binds to `127.0.0.1`. Streamlit's usage statistics are switched off in the committed `.streamlit/config.toml`.
 4. **Screenshots for the README come from demo mode only.**

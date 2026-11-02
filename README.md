@@ -37,7 +37,7 @@ uv sync --extra dashboard
 uv run kiatracker dashboard --demo
 ```
 
-This opens the dashboard at http://127.0.0.1:8501 on 60 days of simulated driving, charging and weather. (`uv run kiatracker demo` does the same in the terminal.)
+This opens the dashboard at http://127.0.0.1:8501 on 60 days of simulated driving, charging and weather. For a terminal-only taste, `uv run kiatracker demo` builds 30 days of fake data into `data/demo/` and prints a summary.
 
 ## Dashboard
 
@@ -50,7 +50,7 @@ This opens the dashboard at http://127.0.0.1:8501 on 60 days of simulated drivin
 
 How it is built:
 - `queries.py` turns DuckDB into pandas frames and `charts.py` turns frames into Altair charts; neither imports Streamlit, so both are unit-tested. Pages are thin `render(con, period)` functions, smoke-tested headlessly with Streamlit's `AppTest`.
-- **Privacy by construction.** Queries return `home` / `other` zones, never coordinates or the VIN (a test enforces it). `KIATRACKER_DEMO=1`, which any public deployment sets, makes the app generate and show simulated data with no path to a personal database. The dashboard binds to `127.0.0.1`, and Streamlit's usage statistics are off. Every screenshot here is demo data.
+- **Privacy by construction, failing closed.** Queries return `home` / `other` zones, never coordinates or the VIN (a test enforces it). The app shows simulated data unless it was started by `kiatracker dashboard`, which opts in to personal data, binds to `127.0.0.1` and turns off Streamlit's usage statistics and error details; personal mode refuses to run on any other address, and `KIATRACKER_DEMO` always forces the demo. Every screenshot here is demo data.
 
 ## Use it with your own Hyundai / Kia / Genesis (Europe)
 

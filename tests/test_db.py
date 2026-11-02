@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 import duckdb
+import pytest
 
 from kiatracker.config import Settings
 from kiatracker.db import build_database, stats
@@ -74,3 +75,37 @@ def test_stats_hides_coordinates(tmp_path):
     text = stats(s)
     assert "Drives: 1" in text and "12.0 km" in text
     assert "47.61" not in text and "19.21" not in text
+
+
+def test_build_retries_while_the_database_is_held_open(tmp_path, monkeypatch):
+    """On Windows a dashboard reading the file blocks os.replace for a moment."""
+    import kiatracker.db as db
+
+    calls = []
+    real_replace = db.os.replace
+
+    def flaky(src, dst):
+        calls.append(1)
+        if len(calls) < 3:
+            raise PermissionError(5, "Access is denied")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(db.os, "replace", flaky)
+    monkeypatch.setattr(db, "REPLACE_WAIT_S", 0)
+    s = settings(tmp_path)
+    fixture(s.raw_dir)
+    assert build_database(s)["drives"] == 1
+    assert len(calls) == 3
+
+
+def test_build_gives_up_with_a_clear_error(tmp_path, monkeypatch):
+    import kiatracker.db as db
+
+    def locked(src, dst):
+        raise PermissionError(5, "Access is denied")
+
+    monkeypatch.setattr(db.os, "replace", locked)
+    monkeypatch.setattr(db, "REPLACE_WAIT_S", 0)
+    s = settings(tmp_path)
+    with pytest.raises(RuntimeError, match="in use"):
+        build_database(s)

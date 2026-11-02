@@ -60,7 +60,8 @@ def _drives(con, period: Period) -> pd.DataFrame:
 
 
 def _sessions(con, period: Period) -> pd.DataFrame:
-    sql = """select * from charging_sessions where start_ts >= ? and start_ts < ? and not in_progress"""
+    sql = """select start_ts, zone, soc_start, soc_end, energy_kwh, hours, avg_kw from charging_sessions
+             where start_ts >= ? and start_ts < ? and not in_progress"""
     df = con.execute(sql, list(period.utc_bounds())).df()
     df["start_local"] = to_local(df["start_ts"])
     return df

@@ -47,3 +47,14 @@ def test_dashboard_command_binds_localhost_and_passes_demo(tmp_path):
     assert env["KIATRACKER_DEMO"] == "1" and env["PATH"] == "x"
     _, personal = dashboard_command(demo=False, environ={})
     assert "KIATRACKER_DEMO" not in personal
+
+
+def test_dashboard_command_turns_off_usage_stats_and_error_details():
+    from kiatracker.cli import dashboard_command
+
+    argv, env = dashboard_command(demo=False, environ={})
+    assert argv[argv.index("--browser.gatherUsageStats") + 1] == "false"
+    assert argv[argv.index("--client.showErrorDetails") + 1] == "none"
+    assert env["KIATRACKER_PERSONAL"] == "1"
+    _, demo_env = dashboard_command(demo=True, environ={})
+    assert "KIATRACKER_PERSONAL" not in demo_env

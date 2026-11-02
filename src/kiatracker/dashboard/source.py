@@ -1,7 +1,8 @@
-"""Which database the dashboard shows: the personal one, or a generated demo.
+"""Which database the dashboard shows: the owner's, or a generated demo. Fails closed.
 
-KIATRACKER_DEMO=1 (set on any public deployment) forces the demo, so a public instance has no path to
-personal data, whatever files happen to be next to it.
+The app shows demo data unless personal mode is switched on explicitly with KIATRACKER_PERSONAL=1, which
+`kiatracker dashboard` sets and nothing else does. KIATRACKER_DEMO (any value but 0/false/empty) always
+wins, so a public deployment can't reach personal data by accident, whatever files sit next to it.
 """
 
 import os
@@ -16,28 +17,33 @@ from kiatracker.db import build_database
 from kiatracker.synthetic import FAKE_HOME, generate
 
 DEMO_ENV = "KIATRACKER_DEMO"
-DEMO_DIR = Path(tempfile.gettempdir()) / "kiatracker-demo"
+PERSONAL_ENV = "KIATRACKER_PERSONAL"
+OFF = {"", "0", "false", "no", "off"}
+LOCAL_ADDRESSES = {"127.0.0.1", "localhost", "::1"}
 
 
 @dataclass(frozen=True)
 class DataSource:
-    db_path: Path
+    db_path: Path | None  # None for demo: the app builds its own private demo database
     demo: bool
 
 
-def resolve_source(
-    personal_db: Path, demo_requested: bool, environ: Mapping[str, str] = os.environ
-) -> DataSource:
-    if demo_requested or environ.get(DEMO_ENV) == "1":
-        return DataSource(DEMO_DIR / "kiatracker.duckdb", demo=True)
-    return DataSource(personal_db, demo=False)
+def resolve_source(personal_db: Path, environ: Mapping[str, str] = os.environ) -> DataSource:
+    demo_forced = environ.get(DEMO_ENV, "").strip().lower() not in OFF
+    if environ.get(PERSONAL_ENV) == "1" and not demo_forced:
+        return DataSource(personal_db, demo=False)
+    return DataSource(None, demo=True)
 
 
-def build_demo_database(target_dir: Path = DEMO_DIR, days: int = 60, seed: int = 7) -> Path:
-    """Generate fake raw data ending yesterday and build it. Rebuilds from scratch each call."""
+def is_local_only(address: str | None) -> bool:
+    """True if the server only listens on this computer. Streamlit's default (unset) means every interface."""
+    return address in LOCAL_ADDRESSES
+
+
+def build_demo_database(target_dir: Path | None = None, days: int = 60, seed: int = 7) -> Path:
+    """Generate fake raw data ending yesterday and build it, by default in a new private temp folder."""
+    target_dir = target_dir or Path(tempfile.mkdtemp(prefix="kiatracker-demo-"))
     settings = Settings(None, None, target_dir, home=FAKE_HOME, home_radius_km=0.3)
-    for old in settings.raw_dir.glob("*.jsonl"):
-        old.unlink()
     start = datetime.combine(date.today() - timedelta(days=days), datetime.min.time(), UTC)
     generate(settings.raw_dir, start, days, seed)
     build_database(settings)

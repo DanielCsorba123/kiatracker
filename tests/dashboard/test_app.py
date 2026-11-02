@@ -22,17 +22,45 @@ def run_page(page: str, db) -> AppTest:
     return AppTest.from_function(render_page, kwargs={"page": page, "db": str(db)}, default_timeout=30).run()
 
 
-def test_demo_mode_shows_banner_and_overview(monkeypatch):
-    monkeypatch.setenv("KIATRACKER_DEMO", "1")
+@pytest.fixture
+def listen(monkeypatch):
+    """Set the server address the app sees, as `--server.address` would."""
+    import streamlit
+
+    def set_address(address):
+        monkeypatch.setattr(
+            streamlit,
+            "get_option",
+            lambda key, real=streamlit.get_option: address if key == "server.address" else real(key),
+        )
+
+    return set_address
+
+
+def test_without_opt_in_the_app_shows_demo(monkeypatch):
+    monkeypatch.delenv("KIATRACKER_PERSONAL", raising=False)
+    monkeypatch.delenv("KIATRACKER_DEMO", raising=False)
     at = AppTest.from_file(APP, default_timeout=60).run()
     assert not at.exception
     assert any("Demo data" in info.value for info in at.info)
     assert at.title[0].value == "Overview"
 
 
-def test_personal_mode_without_database_shows_build_hint(monkeypatch, tmp_path):
+def test_personal_mode_refuses_when_reachable_from_the_network(monkeypatch, tmp_path, listen):
+    monkeypatch.setenv("KIATRACKER_PERSONAL", "1")
     monkeypatch.delenv("KIATRACKER_DEMO", raising=False)
     monkeypatch.setenv("KIATRACKER_DATA_DIR", str(tmp_path))
+    listen("0.0.0.0")
+    at = AppTest.from_file(APP, default_timeout=30).run()
+    assert any("127.0.0.1" in error.value for error in at.error)
+    assert not at.title
+
+
+def test_personal_mode_without_database_shows_build_hint(monkeypatch, tmp_path, listen):
+    monkeypatch.setenv("KIATRACKER_PERSONAL", "1")
+    monkeypatch.delenv("KIATRACKER_DEMO", raising=False)
+    monkeypatch.setenv("KIATRACKER_DATA_DIR", str(tmp_path))
+    listen("127.0.0.1")
     at = AppTest.from_file(APP, default_timeout=30).run()
     assert not at.exception
     assert any("kiatracker build" in warning.value for warning in at.warning)

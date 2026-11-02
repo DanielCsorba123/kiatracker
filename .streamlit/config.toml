@@ -10,3 +10,4 @@ primaryColor = "#2a78d6"
 
 [client]
 toolbarMode = "viewer"  # hide developer options such as Deploy
+showErrorDetails = "none"  # no stack traces or file paths in the browser

@@ -1,28 +1,53 @@
 import duckdb
+import pytest
 
-from kiatracker.dashboard.source import build_demo_database, resolve_source
-
-
-def test_demo_env_wins_over_existing_personal_database(tmp_path):
-    personal = tmp_path / "kiatracker.duckdb"
-    personal.write_bytes(b"real data")
-    source = resolve_source(personal, demo_requested=False, environ={"KIATRACKER_DEMO": "1"})
-    assert source.demo is True
-    assert source.db_path != personal
+from kiatracker.dashboard.source import build_demo_database, is_local_only, resolve_source
 
 
-def test_personal_database_is_default(tmp_path):
-    personal = tmp_path / "kiatracker.duckdb"
-    source = resolve_source(personal, demo_requested=False, environ={})
+@pytest.fixture
+def personal(tmp_path):
+    path = tmp_path / "kiatracker.duckdb"
+    path.write_bytes(b"real data")
+    return path
+
+
+def test_demo_is_the_default_without_explicit_opt_in(personal):
+    """Fail closed: `streamlit run app.py` on any machine shows demo data."""
+    assert resolve_source(personal, environ={}).demo is True
+
+
+def test_personal_mode_needs_explicit_opt_in(personal):
+    source = resolve_source(personal, environ={"KIATRACKER_PERSONAL": "1"})
     assert source == source.__class__(personal, demo=False)
 
 
-def test_demo_requested_uses_demo(tmp_path):
-    assert resolve_source(tmp_path / "x.duckdb", demo_requested=True, environ={}).demo is True
+@pytest.mark.parametrize("value", ["1", "true", "yes", "on", "TRUE"])
+def test_demo_flag_wins_over_personal_opt_in(personal, value):
+    source = resolve_source(personal, environ={"KIATRACKER_PERSONAL": "1", "KIATRACKER_DEMO": value})
+    assert source.demo is True and source.db_path is None
 
 
-def test_demo_database_has_drives_and_no_real_home(tmp_path):
+@pytest.mark.parametrize("value", ["0", "false", ""])
+def test_demo_flag_off_values(personal, value):
+    source = resolve_source(personal, environ={"KIATRACKER_PERSONAL": "1", "KIATRACKER_DEMO": value})
+    assert source.demo is False
+
+
+@pytest.mark.parametrize(
+    "address,local",
+    [("127.0.0.1", True), ("localhost", True), ("::1", True), ("0.0.0.0", False), ("", False), (None, False)],
+)
+def test_is_local_only(address, local):
+    assert is_local_only(address) is local
+
+
+def test_demo_database_has_drives(tmp_path):
     db = build_demo_database(tmp_path, days=10)
     with duckdb.connect(str(db), read_only=True) as con:
         assert con.execute("select count(*) from drives").fetchone()[0] > 5
         assert con.execute("select count(*) from drives where start_zone = 'home'").fetchone()[0] > 0
+
+
+def test_demo_database_defaults_to_a_private_new_folder():
+    a, b = build_demo_database(days=3), build_demo_database(days=3)
+    assert a.parent != b.parent and a.parent.name.startswith("kiatracker-demo-")

@@ -99,10 +99,16 @@ def dashboard_command(
         "127.0.0.1",
         "--server.port",
         str(port),
+        "--browser.gatherUsageStats",
+        "false",
+        "--client.showErrorDetails",
+        "none",  # no stack traces or file paths in the browser
     ]
     env = dict(environ)
     if demo:
         env["KIATRACKER_DEMO"] = "1"
+    else:
+        env["KIATRACKER_PERSONAL"] = "1"
     if data_dir:
         env["KIATRACKER_DATA_DIR"] = str(data_dir)
     return argv, env

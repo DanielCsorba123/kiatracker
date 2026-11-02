@@ -6,6 +6,7 @@ corrupt. Timestamps are stored as naive UTC (`TIMESTAMP`); columns ending in `_t
 
 import dataclasses
 import os
+import time
 import types
 import typing
 from datetime import UTC, datetime
@@ -37,6 +38,8 @@ from kiatracker.weather import DriveWeather, load_weather, weather_for_drive
 
 DEFAULT_CAPACITY_KWH = 81.4  # EV3 Long Range, used only if no reading reports it
 INSERT_BATCH = 500
+REPLACE_TRIES = 20
+REPLACE_WAIT_S = 0.5  # on Windows a reader (e.g. the dashboard) blocks replacing the file for a moment
 LOCAL_TZ = ZoneInfo("Europe/Budapest")
 SQL_TYPES = {datetime: "TIMESTAMP", float: "DOUBLE", int: "BIGINT", bool: "BOOLEAN", str: "VARCHAR"}
 
@@ -74,6 +77,16 @@ def derive_all(settings: Settings) -> tuple[Readings, list[Drive], list[Charging
     return r, drives, sessions, derive_charge_windows(sessions, drives, capacity)
 
 
+def replace_when_free(src: Path, dst: Path) -> None:
+    for _ in range(REPLACE_TRIES):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            time.sleep(REPLACE_WAIT_S)
+    raise RuntimeError(f"{dst} is in use by another program; the new build is left in {src}")
+
+
 def build_database(settings: Settings) -> dict[str, int]:
     r, drives, sessions, windows = derive_all(settings)
     weather = load_weather(settings.raw_dir)
@@ -96,7 +109,7 @@ def build_database(settings: Settings) -> dict[str, int]:
     tmp.unlink(missing_ok=True)
     with duckdb.connect(str(tmp)) as con:
         result = {name: write_table(con, name, cls, rows) for name, cls, rows in tables}
-    os.replace(tmp, settings.db_path)
+    replace_when_free(tmp, settings.db_path)
     return result
 
 
