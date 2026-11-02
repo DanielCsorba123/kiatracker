@@ -97,3 +97,10 @@ def test_costs_arithmetic(tiny):
 def test_middle_bands_show_both_edges(demo, all_time):
     bands = q.consumption_by_band(demo, all_time, "temp_c", [-30, 0, 10, 45])
     assert list(bands["band"]) == ["under 0", "0 to 10", "10+"]
+
+
+def test_unfinished_drive_is_not_shown_or_counted(tiny):
+    november = Period(date(2026, 11, 1), date(2026, 11, 30))
+    with tiny(unfinished=True) as con:
+        assert len(q.drives(con, november)) == 2
+        assert q.kpis(con, november)["drives"] == 2 and q.kpis(con, november)["distance_km"] == 100

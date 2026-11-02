@@ -37,7 +37,7 @@ def all_time():
 def tiny(tmp_path):
     """Factory: a hand-made database with two November drives (100 km, 15 kWh) and one 20 kWh charge."""
 
-    def make(consumption: float | None = 15.0):
+    def make(consumption: float | None = 15.0, unfinished: bool = False):
         path = tmp_path / "tiny.duckdb"
         with duckdb.connect(str(path)) as con:
             con.execute(
@@ -49,6 +49,11 @@ def tiny(tmp_path):
                 con.execute(
                     "insert into drives values (?, ?, ?, ?, ?, 'home', 'other', false)",
                     [f"2026-11-{day:02d} 08:00", f"2026-11-{day:02d} 09:00", km, kwh, consumption],
+                )
+            if unfinished:  # the car was still on when the database was built
+                con.execute(
+                    "insert into drives values ('2026-11-12 08:00', '2026-11-12 08:00', 0.4, null, null, "
+                    "'home', null, true)"
                 )
             con.execute(
                 "create table charging_sessions (start_ts timestamp, zone varchar, soc_start double, "

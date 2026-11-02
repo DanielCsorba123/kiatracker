@@ -5,8 +5,13 @@ gatherUsageStats = false  # don't send usage statistics to Streamlit
 [server]
 headless = true
 
-[theme]
+# Light and dark both defined, no fixed base: the dashboard follows the viewer's system setting,
+# and the "Settings" item in the top-right menu switches between them.
+[theme.light]
 primaryColor = "#2a78d6"
+
+[theme.dark]
+primaryColor = "#3987e5"
 
 [client]
 toolbarMode = "viewer"  # hide developer options such as Deploy

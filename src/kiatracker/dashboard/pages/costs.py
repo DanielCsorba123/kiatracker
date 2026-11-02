@@ -12,7 +12,15 @@ def render(con, period: queries.Period) -> None:
     electricity = b.number_input(f"Electricity ({currency}/kWh)", min_value=0.0, value=0.25, step=0.01)
     petrol = c.number_input(f"Petrol ({currency}/L)", min_value=0.0, value=1.70, step=0.05)
     petrol_use = d.number_input("Petrol car (L/100 km)", min_value=0.0, value=6.5, step=0.5)
-    loss = e.number_input("Charging loss (%)", min_value=0.0, max_value=50.0, value=10.0, step=1.0)
+    loss = e.number_input(
+        "Charging loss (%)",
+        min_value=0.0,
+        max_value=50.0,
+        value=10.0,
+        step=1.0,
+        help="Not all electricity from the wall reaches the battery: the charger and cables turn some into "
+        "heat. At home on 11 kW AC about 8-12 % is lost, so you pay for about 10 % more than the car stores.",
+    )
 
     monthly = queries.costs(con, period, electricity, petrol, petrol_use, loss)
     if monthly.empty:

@@ -9,6 +9,8 @@ import pandas as pd
 
 BLUE = "#2a78d6"  # categorical slot 1
 ORANGE = "#eb6834"  # categorical slot 2, for a second series when one is needed
+INK = "#8a8985"  # whiskers: mid grey reads on both the light and the dark surface
+REFERENCE = "#9a9994"  # reference lines such as the perfect-prediction diagonal
 HEIGHT = 260
 
 
@@ -57,7 +59,7 @@ def predicted_vs_actual(df: pd.DataFrame, unit: str) -> alt.LayerChart:
     domain = [float(values.min()), float(values.max())]
     scale = alt.Scale(domain=domain, zero=False)
     base = _base(df, "Predicted vs actual consumption")
-    points = base.mark_circle(color=BLUE, size=70, opacity=0.75, stroke="white", strokeWidth=1).encode(
+    points = base.mark_circle(color=BLUE, size=70, opacity=0.75, strokeWidth=0).encode(
         x=alt.X("predicted:Q", title=f"Predicted {unit}", scale=scale),
         y=alt.Y("actual:Q", title=f"Actual {unit}", scale=scale),
         tooltip=[_tip("predicted:Q", "Predicted"), _tip("actual:Q", "Actual")],
@@ -65,7 +67,7 @@ def predicted_vs_actual(df: pd.DataFrame, unit: str) -> alt.LayerChart:
     line_df = pd.DataFrame({"predicted": domain, "actual": domain})
     diagonal = (
         alt.Chart(line_df)
-        .mark_line(color="#52514e", strokeDash=[4, 4], strokeWidth=1)
+        .mark_line(color=REFERENCE, strokeDash=[4, 4], strokeWidth=1)
         .encode(x=alt.X("predicted:Q", scale=scale), y=alt.Y("actual:Q", scale=scale))
     )
     return alt.layer(points, diagonal)
@@ -81,7 +83,7 @@ def bar_with_interval(
         y=alt.Y(f"{y}:Q", title=y_title),
         tooltip=[_tip(x), _tip(f"{y}:Q", "Expected"), _tip(f"{lo}:Q", "Low"), _tip(f"{hi}:Q", "High")],
     )
-    whiskers = base.mark_rule(color="#0b0b0b", strokeWidth=2).encode(x=_x(x, None), y=f"{lo}:Q", y2=f"{hi}:Q")
+    whiskers = base.mark_rule(color=INK, strokeWidth=2).encode(x=_x(x, None), y=f"{lo}:Q", y2=f"{hi}:Q")
     return alt.layer(bars, whiskers)
 
 
@@ -102,7 +104,7 @@ def scatter(
 ) -> alt.Chart:
     return (
         _base(df, title)
-        .mark_circle(color=BLUE, size=70, opacity=0.75, stroke="white", strokeWidth=1)
+        .mark_circle(color=BLUE, size=70, opacity=0.75, strokeWidth=0)
         .encode(
             x=alt.X(x, title=x_title, scale=alt.Scale(zero=False)),
             y=alt.Y(y, title=y_title, scale=alt.Scale(zero=False)),
