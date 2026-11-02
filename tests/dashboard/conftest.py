@@ -60,3 +60,10 @@ def tiny(tmp_path):
         return connect(path)
 
     return make
+
+
+@pytest.fixture
+def empty_db_path(tmp_path):
+    settings = Settings(None, None, tmp_path / "empty", home=None)
+    build_database(settings)
+    return settings.db_path

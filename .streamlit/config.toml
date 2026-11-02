@@ -1,0 +1,9 @@
+# Committed on purpose: no secrets here. Streamlit secrets would go in secrets.toml, which is gitignored.
+[browser]
+gatherUsageStats = false  # don't send usage statistics to Streamlit
+
+[server]
+headless = true
+
+[theme]
+primaryColor = "#2a78d6"

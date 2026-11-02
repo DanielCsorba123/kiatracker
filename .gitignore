@@ -11,3 +11,6 @@ spikes/probe_output/
 __pycache__/
 *.pyc
 .venv/
+
+# Streamlit secrets (never commit)
+.streamlit/secrets.toml
