@@ -24,6 +24,7 @@ from kiatracker.forecast.model import NotEnoughData, RangeModel
 from kiatracker.forecast.outlook import LOCAL, daily_outlook, fetch_forecast, latest_forecast
 from kiatracker.forecast.train import DEFAULT_SPEED, MODEL_FILE, car_state, train, weather_cell
 from kiatracker.pleos import PleosClient, PleosError
+from kiatracker.prices import download_oil_bulletin, fuel_is_stale, parse_oil_bulletin, store_fuel_prices
 from kiatracker.synthetic import FAKE_HOME, generate
 from kiatracker.weather import fetch_weather
 
@@ -94,6 +95,13 @@ def cmd_refresh(settings: Settings, args) -> int:
                 print("Forecast fetched" if status == 200 else f"Forecast not available (HTTP {status})")
             except httpx.HTTPError as err:
                 print(f"Forecast skipped: {type(err).__name__}")
+        if fuel_is_stale(settings.raw_dir, datetime.now(UTC)):
+            try:
+                weeks = parse_oil_bulletin(download_oil_bulletin(http))
+                store_fuel_prices(settings.raw_dir, weeks, datetime.now(UTC))
+                print(f"Fuel prices: {len(weeks)} weeks, latest {weeks[-1]['week'] if weeks else '-'}")
+            except (httpx.HTTPError, KeyError, ValueError) as err:
+                print(f"Fuel prices skipped: {type(err).__name__}")
     counts = build_database(settings)
     print(f"Rebuilt: {counts['drives']} drives, {counts['charging_sessions']} charging sessions")
     with duckdb.connect(str(settings.db_path), read_only=True) as con:

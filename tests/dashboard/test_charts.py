@@ -87,3 +87,21 @@ def test_predicted_vs_actual_has_equal_axes_and_a_diagonal():
     x, y = points["encoding"]["x"], points["encoding"]["y"]
     assert x["scale"]["domain"] == y["scale"]["domain"] == [10.0, 22.5]
     assert diagonal["mark"]["type"] == "line" and diagonal["mark"]["strokeDash"]
+
+
+def test_grouped_bars_keep_series_colours_fixed_and_show_a_legend():
+    df = pd.DataFrame(
+        {
+            "month": ["2026-10", "2026-10", "2026-11"],
+            "series": ["EV", "Petrol car", "EV"],
+            "value": [5000.0, 30000.0, 6000.0],
+        }
+    )
+    spec = charts.grouped_bar(
+        df, "month", "series", "value", "Monthly cost", "Ft", ["EV", "Petrol car", "Diesel car"]
+    )
+    enc = spec.to_dict()["encoding"]
+    assert enc["color"]["scale"]["domain"] == ["EV", "Petrol car", "Diesel car"]
+    assert enc["color"]["scale"]["range"][:3] == [charts.BLUE, charts.ORANGE, charts.AQUA]
+    assert "legend" not in enc["color"] or enc["color"]["legend"] is not None
+    assert "tooltip" in enc and "xOffset" in enc

@@ -56,6 +56,13 @@ def tiny(tmp_path):
                     "'home', null, true)"
                 )
             con.execute(
+                "create table fuel_prices (week varchar, at_petrol_eur double, at_diesel_eur double, "
+                "hu_petrol_eur double, hu_diesel_eur double, huf_per_eur double, hu_petrol_huf double, "
+                "hu_diesel_huf double)"
+            )
+            con.execute("insert into fuel_prices values ('2026-10-26', 1.7, 2.1, 1.7, 1.9, 360, 612, 684)")
+            con.execute("insert into fuel_prices values ('2026-11-02', 1.8, 2.2, 1.75, 1.95, 367, 640, 700)")
+            con.execute(
                 "create table charging_sessions (start_ts timestamp, zone varchar, soc_start double, "
                 "soc_end double, energy_kwh double, hours double, avg_kw double, in_progress boolean)"
             )

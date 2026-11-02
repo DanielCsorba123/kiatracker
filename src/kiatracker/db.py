@@ -35,6 +35,7 @@ from kiatracker.model import (
     Readings,
     StatusReading,
 )
+from kiatracker.prices import load_fuel_prices
 from kiatracker.silver import load_readings
 from kiatracker.weather import DriveWeather, load_weather, weather_for_drive
 
@@ -52,6 +53,18 @@ class ForecastHour:
     temp_c: float | None
     wind_kph: float | None
     wind_dir_deg: float | None
+
+
+@dataclass(frozen=True)
+class FuelWeek:
+    week: str
+    at_petrol_eur: float
+    at_diesel_eur: float
+    hu_petrol_eur: float
+    hu_diesel_eur: float
+    huf_per_eur: float
+    hu_petrol_huf: float
+    hu_diesel_huf: float
 
 
 def forecast_hours(raw_dir: Path) -> list[ForecastHour]:
@@ -133,6 +146,7 @@ def build_database(settings: Settings) -> dict[str, int]:
         ("charge_windows", ChargeWindow, windows),
         ("drive_weather", DriveWeather, drive_weather),
         ("forecast_hourly", ForecastHour, forecast_hours(settings.raw_dir)),
+        ("fuel_prices", FuelWeek, [FuelWeek(**w) for w in load_fuel_prices(settings.raw_dir)]),
     ]
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     tmp = settings.db_path.with_suffix(".building")

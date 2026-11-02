@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from kiatracker.geo import bearing_deg, headwind_kph
-from kiatracker.raw import append_records
+from kiatracker.raw import append_record, append_records
 
 FAKE_HOME = (47.0, 18.0)  # a field in rural Hungary, not anyone's home
 DESTINATIONS = [(0.08, 0.12), (-0.05, 0.2), (0.15, -0.1), (0.02, 0.04)]  # offsets in degrees
@@ -190,6 +190,32 @@ def write_forecast(out: dict, first_midnight: datetime, days: list[DayWeather]) 
     out["forecast"].append((first_midnight, record))
 
 
+def write_fuel_prices(raw_dir: Path, start: datetime, days: int) -> None:
+    """Weekly pump prices in the shape of the EU Oil Bulletin record, near late-2026 levels (demo values)."""
+    weeks = []
+    monday = start - timedelta(days=start.weekday())
+    for n in range(days // 7 + 2):
+        wobble = 0.03 * math.sin(n / 2)
+        huf_per_eur = 367.0
+        hu_petrol, hu_diesel = 1.75 + wobble, 1.93 + wobble
+        weeks.append(
+            {
+                "week": (monday + timedelta(weeks=n)).date().isoformat(),
+                "at_petrol_eur": 1.77 + wobble,
+                "at_diesel_eur": 2.13 + wobble,
+                "hu_petrol_eur": hu_petrol,
+                "hu_diesel_eur": hu_diesel,
+                "huf_per_eur": huf_per_eur,
+                "hu_petrol_huf": hu_petrol * huf_per_eur,
+                "hu_diesel_huf": hu_diesel * huf_per_eur,
+            }
+        )
+    fetched = start + timedelta(days=days)
+    append_record(
+        raw_dir, "fuel", {"fetched_at": fetched.isoformat(), "source": "demo", "weeks": weeks}, fetched
+    )
+
+
 def generate(raw_dir: Path, start: datetime, days: int, seed: int = 7) -> list[dict]:
     """Write fake raw files; return the true drives (start, end, distance_km) to test the pipeline with."""
     rng = random.Random(seed)
@@ -252,4 +278,5 @@ def generate(raw_dir: Path, start: datetime, days: int, seed: int = 7) -> list[d
     write_forecast(car.out, start + timedelta(days=days), climate[days:])
     for kind, records in car.out.items():
         append_records(raw_dir, kind, records)
+    write_fuel_prices(raw_dir, start, days)
     return truth

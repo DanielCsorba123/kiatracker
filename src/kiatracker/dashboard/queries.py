@@ -12,6 +12,8 @@ from zoneinfo import ZoneInfo
 import duckdb
 import pandas as pd
 
+from kiatracker.prices import ELECTRICITY
+
 LOCAL = ZoneInfo("Europe/Budapest")
 
 
@@ -158,23 +160,79 @@ def weekly_charging(con, period: Period) -> pd.DataFrame:
     return g[["week", "energy_kwh", "sessions"]]
 
 
-def costs(
-    con,
-    period: Period,
-    electricity_per_kwh: float,
-    petrol_per_litre: float,
-    petrol_l_per_100km: float,
-    charging_loss_pct: float,
-) -> pd.DataFrame:
-    """Monthly cost of the electricity charged vs the petrol the same distance would have needed."""
-    d, s = _drives(con, period), _sessions(con, period)
+@dataclass(frozen=True)
+class CostAssumptions:
+    """What the comparison assumes; the page shows these and lets you change them."""
+
+    petrol_l_per_100km: float = 6.5  # a comparable compact petrol SUV
+    diesel_l_per_100km: float = 5.5  # the same car with a diesel engine
+    charging_loss_pct: float = 10.0  # wall to battery, home AC charging
+    hu_electricity_huf: float = ELECTRICITY["hu_above_average_huf"]
+    at_electricity_eur: float = ELECTRICITY["at_household_eur"]
+
+
+FUEL_COLUMNS = ["at_petrol_eur", "at_diesel_eur", "hu_petrol_huf", "hu_diesel_huf", "huf_per_eur"]
+
+
+def fuel_price_for_month(con, month: str) -> dict | None:
+    """Average weekly pump prices in a month; for a month without data, the latest earlier month's."""
+    if not has_table(con, "fuel_prices"):
+        return None
+    averages = ", ".join(f"avg({c}) as {c}" for c in FUEL_COLUMNS)
+    rows = con.execute(
+        f"""select substr(week, 1, 7) as month, {averages} from fuel_prices
+            where substr(week, 1, 7) <= ? group by month order by month desc limit 1""",
+        [month],
+    ).fetchall()
+    return dict(zip(["month", *FUEL_COLUMNS], rows[0], strict=True)) if rows else None
+
+
+def latest_fuel_week(con) -> str | None:
+    if not has_table(con, "fuel_prices"):
+        return None
+    return con.execute("select max(week) from fuel_prices").fetchone()[0]
+
+
+def costs(con, period: Period, assume: CostAssumptions) -> pd.DataFrame:
+    """Per month: what the EV's energy cost, against a petrol and a diesel car over the same distance,
+    at Hungarian prices (forint) and, for comparison, Austrian prices (euro)."""
+    columns = [
+        "month",
+        "distance_km",
+        "battery_kwh",
+        "ev_huf",
+        "petrol_huf",
+        "diesel_huf",
+        "ev_at_eur",
+        "petrol_at_eur",
+        "diesel_at_eur",
+    ]
+    d = _drives(con, period)
+    if d.empty or latest_fuel_week(con) is None:
+        return pd.DataFrame(columns=columns)
+    # energy of each drive from its charge used; drives too short to measure get the period's average
+    measured = d[d["energy_kwh"].notna() & (d["energy_kwh"] > 0)]
+    per_km = measured["energy_kwh"].sum() / measured["distance_km"].sum() if not measured.empty else 0.17
+    d["battery_kwh"] = d["energy_kwh"].where(d["energy_kwh"] > 0, d["distance_km"] * per_km)
     d["month"] = d["start_local"].dt.strftime("%Y-%m")
-    s["month"] = s["start_local"].dt.strftime("%Y-%m")
-    distance = d.groupby("month")["distance_km"].sum()
-    charged = s.groupby("month")["energy_kwh"].sum()
-    out = pd.DataFrame({"distance_km": distance, "charged_kwh": charged}).fillna(0).sort_index()
-    out["electricity_cost"] = out["charged_kwh"] / (1 - charging_loss_pct / 100) * electricity_per_kwh
-    out["petrol_cost"] = out["distance_km"] * petrol_l_per_100km / 100 * petrol_per_litre
-    out["savings"] = out["petrol_cost"] - out["electricity_cost"]
-    out = out.rename_axis("month").reset_index()
-    return out[["month", "distance_km", "electricity_cost", "petrol_cost", "savings"]]
+    monthly = d.groupby("month", as_index=False)[["distance_km", "battery_kwh"]].sum()
+    rows = []
+    for m in monthly.itertuples():
+        price = fuel_price_for_month(con, m.month)
+        grid_kwh = m.battery_kwh / (1 - assume.charging_loss_pct / 100)
+        petrol_l = m.distance_km * assume.petrol_l_per_100km / 100
+        diesel_l = m.distance_km * assume.diesel_l_per_100km / 100
+        rows.append(
+            {
+                "month": m.month,
+                "distance_km": m.distance_km,
+                "battery_kwh": m.battery_kwh,
+                "ev_huf": grid_kwh * assume.hu_electricity_huf,
+                "petrol_huf": petrol_l * price["hu_petrol_huf"],
+                "diesel_huf": diesel_l * price["hu_diesel_huf"],
+                "ev_at_eur": grid_kwh * assume.at_electricity_eur,
+                "petrol_at_eur": petrol_l * price["at_petrol_eur"],
+                "diesel_at_eur": diesel_l * price["at_diesel_eur"],
+            }
+        )
+    return pd.DataFrame(rows, columns=columns)

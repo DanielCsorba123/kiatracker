@@ -14,7 +14,7 @@ def frames(con, period):
     yield q.consumption_by_band(con, period, "temp_c", [-20, 0, 10, 40])
     yield q.charging_sessions(con, period)
     yield q.weekly_charging(con, period)
-    yield q.costs(con, period, 60, 600, 6, 10)
+    yield q.costs(con, period, q.CostAssumptions())
 
 
 def test_no_query_returns_coordinates_or_vin(demo, all_time):
@@ -84,14 +84,33 @@ def test_only_short_drives_have_no_consumption(tiny):
 
 
 def test_costs_arithmetic(tiny):
+    assume = q.CostAssumptions(
+        petrol_l_per_100km=6.5,
+        diesel_l_per_100km=5.0,
+        charging_loss_pct=10,
+        hu_electricity_huf=70.0,
+        at_electricity_eur=0.30,
+    )
     with tiny() as con:
-        costs = q.costs(con, Period(date(2026, 11, 1), date(2026, 11, 30)), 50, 600, 6, 10)
-    row = costs.iloc[0]
-    assert row["month"] == "2026-11"
-    assert row["distance_km"] == 100
-    assert row["electricity_cost"] == pytest.approx(20 / 0.9 * 50)
-    assert row["petrol_cost"] == pytest.approx(100 * 6 / 100 * 600)
-    assert row["savings"] == pytest.approx(row["petrol_cost"] - row["electricity_cost"])
+        [row] = q.costs(con, Period(date(2026, 11, 1), date(2026, 11, 30)), assume).to_dict("records")
+    grid_kwh = 15 / 0.9  # 15 kWh into the battery over 100 km, 10 % lost on the way
+    assert row["month"] == "2026-11" and row["distance_km"] == 100
+    assert row["ev_huf"] == pytest.approx(grid_kwh * 70.0)
+    assert row["petrol_huf"] == pytest.approx(6.5 * 640)  # November's average Hungarian petrol price
+    assert row["diesel_huf"] == pytest.approx(5.0 * 700)
+    assert row["ev_at_eur"] == pytest.approx(grid_kwh * 0.30)
+    assert row["petrol_at_eur"] == pytest.approx(6.5 * 1.8)
+
+
+def test_month_without_its_own_fuel_week_uses_the_latest_earlier_one(tiny):
+    with tiny() as con:
+        con_period = Period(date(2026, 11, 1), date(2026, 11, 30))
+        prices = q.fuel_price_for_month(con, "2026-12")
+    assert prices["hu_petrol_huf"] == 640 and con_period
+
+
+def test_no_fuel_prices_yet_gives_no_costs(empty, all_time):
+    assert q.costs(empty, all_time, q.CostAssumptions()).empty
 
 
 def test_middle_bands_show_both_edges(demo, all_time):

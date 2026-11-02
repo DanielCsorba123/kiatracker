@@ -9,6 +9,7 @@ import pandas as pd
 
 BLUE = "#2a78d6"  # categorical slot 1
 ORANGE = "#eb6834"  # categorical slot 2, for a second series when one is needed
+AQUA = "#1baf7a"  # categorical slot 3; the first three slots stay distinguishable for colour-blind readers
 INK = "#8a8985"  # whiskers: mid grey reads on both the light and the dark surface
 REFERENCE = "#9a9994"  # reference lines such as the perfect-prediction diagonal
 HEIGHT = 260
@@ -71,6 +72,30 @@ def predicted_vs_actual(df: pd.DataFrame, unit: str) -> alt.LayerChart:
         .encode(x=alt.X("predicted:Q", scale=scale), y=alt.Y("actual:Q", scale=scale))
     )
     return alt.layer(points, diagonal)
+
+
+def grouped_bar(
+    df: pd.DataFrame, x: str, series: str, y: str, title: str, y_title: str, order: list[str]
+) -> alt.Chart:
+    """Bars side by side per x value; each series keeps its colour whatever is filtered (legend shown)."""
+    colors = alt.Scale(domain=order, range=[BLUE, ORANGE, AQUA][: len(order)])
+    return (
+        _base(df, title)
+        .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+        .encode(
+            x=alt.X(f"{x}:O", title=None, axis=alt.Axis(labelAngle=0, grid=False)),
+            xOffset=alt.XOffset(f"{series}:N", sort=order),
+            y=alt.Y(f"{y}:Q", title=y_title),
+            color=alt.Color(
+                f"{series}:N", scale=colors, sort=order, legend=alt.Legend(title=None, orient="top")
+            ),
+            tooltip=[
+                _tip(f"{x}:O", "Month"),
+                _tip(f"{series}:N", "Car"),
+                alt.Tooltip(f"{y}:Q", title=y_title, format=",.0f"),
+            ],
+        )
+    )
 
 
 def bar_with_interval(
