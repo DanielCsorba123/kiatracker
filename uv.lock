@@ -315,6 +315,7 @@ source = { editable = "." }
 dependencies = [
     { name = "duckdb" },
     { name = "httpx" },
+    { name = "numpy" },
     { name = "tzdata" },
 ]
 
@@ -338,6 +339,7 @@ requires-dist = [
     { name = "altair", marker = "extra == 'dashboard'", specifier = ">=5" },
     { name = "duckdb", specifier = ">=1.1" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "numpy", specifier = ">=2.0" },
     { name = "pandas", marker = "extra == 'dashboard'", specifier = ">=2.2" },
     { name = "streamlit", marker = "extra == 'dashboard'", specifier = ">=1.50" },
     { name = "tzdata", specifier = ">=2024.1" },
