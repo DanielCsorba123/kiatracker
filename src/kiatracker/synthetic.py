@@ -18,6 +18,7 @@ CAPACITY_KJ = 293040.0
 CAPACITY_KWH = CAPACITY_KJ / 3600
 POLL = timedelta(minutes=5)
 CHARGE_KW = 7.4
+WEATHER_CELLS = 2  # cells each side of home: drive midpoints stay within 0.2 degrees
 
 
 def iso(ts: datetime) -> str:
@@ -79,11 +80,14 @@ class Car:
             }
             append_record(self.raw_dir, "snapshots", record, fetched)
 
-    def drive(self, start: datetime, to: tuple[float, float], km: float, temp: float, rng) -> datetime:
+    def drive(
+        self, start: datetime, to: tuple[float, float], km: float, temp: float, wind: float, rng
+    ) -> datetime:
         speed = rng.uniform(35, 70)
         minutes = km / speed * 60
         end = start + timedelta(minutes=minutes)
-        kwh_per_km = (14.5 + 0.3 * max(0.0, 15 - temp) + rng.uniform(-1, 1)) / 100
+        headwind = wind * rng.uniform(-0.5, 1.0)  # direction relative to the route, mostly against
+        kwh_per_km = (14.5 + 0.3 * max(0.0, 15 - temp) + 0.12 * headwind + rng.uniform(-1, 1)) / 100
         origin, odo0, soc0 = self.pos, self.odo, self.soc
         t = start + POLL
         while True:
@@ -109,27 +113,60 @@ class Car:
         return t
 
 
+def write_weather(raw_dir: Path, midnight: datetime, temp: float, wind: float) -> None:
+    """Open-Meteo-shaped hourly weather for every 0.1 degree cell around the fake home, as the weather
+    command would have cached it."""
+    day = midnight.date().isoformat()
+    hourly = {
+        "time": [f"{day}T{h:02d}:00" for h in range(24)],
+        "temperature_2m": [round(temp + 3 * math.sin((h - 9) / 24 * 2 * math.pi), 1) for h in range(24)],
+        "wind_speed_10m": [round(wind * (0.8 + 0.4 * math.sin(h / 5)), 1) for h in range(24)],
+        "wind_direction_10m": [270.0] * 24,
+        "wind_gusts_10m": [round(wind * 1.6, 1)] * 24,
+    }
+    for i in range(-WEATHER_CELLS, WEATHER_CELLS + 1):
+        for j in range(-WEATHER_CELLS, WEATHER_CELLS + 1):
+            key = {
+                "lat": round(FAKE_HOME[0] + i / 10, 1),
+                "lon": round(FAKE_HOME[1] + j / 10, 1),
+                "date": day,
+            }
+            record = {
+                "fetched_at": midnight.isoformat(),
+                "endpoint": "open-meteo",
+                "key": key,
+                "http_status": 200,
+                "body": {"hourly": hourly},
+            }
+            append_record(raw_dir, "weather", record, midnight)
+
+
 def generate(raw_dir: Path, start: datetime, days: int, seed: int = 7) -> list[dict]:
     """Write fake raw files; return the true drives (start, end, distance_km) to test the pipeline with."""
     rng = random.Random(seed)
     car = Car(raw_dir, start)
     truth: list[dict] = []
+    busy_until = start  # the car can't leave before the last charge or drive has finished
     for day in range(days):
         midnight = start + timedelta(days=day)
         temp = 4 + 8 * math.sin(day / 6) + rng.uniform(-3, 3)
-        t = midnight + timedelta(hours=7, minutes=rng.randint(0, 90))
+        wind = rng.uniform(5, 35)
+        write_weather(raw_dir, midnight, temp, wind)
+        t = max(midnight + timedelta(hours=7, minutes=rng.randint(0, 90)), busy_until + timedelta(minutes=10))
         day_trips = []
         for _ in range(rng.choice([1, 1, 2])):
             offset = rng.choice(DESTINATIONS)
             place = (FAKE_HOME[0] + offset[0], FAKE_HOME[1] + offset[1])
             for target in (place, FAKE_HOME):
                 km = round(rng.uniform(3, 35), 1)
-                end = car.drive(t, target, km, temp, rng)
+                end = car.drive(t, target, km, temp, wind, rng)
                 truth.append({"start": t.isoformat(), "end": end.isoformat(), "distance_km": km})
                 day_trips.append((t, end))
                 t = end + timedelta(hours=rng.uniform(0.5, 8))
         if car.soc < 50:
-            car.charge(t + timedelta(minutes=10), temp)
+            busy_until = car.charge(t + timedelta(minutes=10), temp)
+        else:
+            busy_until = t
         fetched = midnight + timedelta(days=1)
         trips = [
             {
@@ -151,4 +188,5 @@ def generate(raw_dir: Path, start: datetime, days: int, seed: int = 7) -> list[d
             },
             fetched,
         )
+    write_weather(raw_dir, start + timedelta(days=days), temp, wind)  # drives running past midnight
     return truth

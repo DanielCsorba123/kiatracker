@@ -46,3 +46,14 @@ def test_generation_is_reproducible(tmp_path):
     a = generate(tmp_path / "a", START, days=3, seed=1)
     b = generate(tmp_path / "b", START, days=3, seed=1)
     assert a == b
+
+
+def test_demo_drives_have_weather(tmp_path):
+    settings = Settings(None, None, tmp_path, home=FAKE_HOME, home_radius_km=0.3)
+    generate(settings.raw_dir, START, days=10, seed=3)
+    counts = build_database(settings)
+    with duckdb.connect(str(settings.db_path), read_only=True) as con:
+        located = con.execute("select count(*) from drives where mid_lat is not null").fetchone()[0]
+        winds = con.execute("select min(wind_kph), max(wind_kph) from drive_weather").fetchone()
+    assert counts["drive_weather"] == located > 0
+    assert winds[0] < winds[1]  # wind varies from day to day
