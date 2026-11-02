@@ -186,3 +186,50 @@ def test_drive_starting_before_unplug_reading_counts_in_window():
     )
     [w] = derive_charge_windows(derive_charging_sessions(r, CAP, None, 0.3), drives_of(r), CAP)
     assert (w.drives, w.distance_km) == (1, 20.0)
+
+
+def test_trips_merged_by_polling_are_split_by_api_trips():
+    """Two trips with a short stop in between that the 5-minute polling never saw as 'ignition off'."""
+    r = Readings(
+        battery=[
+            bat(0, 80.0),
+            bat(5, 79.5),
+            bat(10, 78.5),
+            bat(15, 78.5),
+            bat(20, 77.5),
+            bat(25, 76.5),
+            bat(30, 76.0),
+        ],
+        driving=[
+            drv(0, 1000.0, False),
+            drv(5, 1003.0, True),
+            drv(10, 1008.0, True),
+            drv(15, 1008.0, True),
+            drv(20, 1012.0, True),
+            drv(25, 1016.0, True),
+            drv(30, 1018.0, False),
+        ],
+        api_trips=[ApiTrip(at(2), at(9)), ApiTrip(at(17), at(29))],
+    )
+    first, second = drives_of(r)
+    assert (first.start_ts, first.end_ts, first.distance_km) == (at(2), at(9), 8.0)
+    assert (first.soc_start, first.soc_end) == (80.0, 78.5)
+    assert (second.start_ts, second.end_ts, second.distance_km) == (at(17), at(29), 10.0)
+    assert (second.soc_start, second.soc_end) == (78.5, 76.0)
+    assert not first.in_progress and not second.in_progress
+    assert (first.drive_id, second.drive_id) == (1, 2)
+
+
+def test_split_keeps_the_last_part_in_progress_while_driving():
+    r = Readings(
+        driving=[
+            drv(0, 1000.0, False),
+            drv(5, 1003.0, True),
+            drv(10, 1008.0, True),
+            drv(15, 1008.0, True),
+            drv(20, 1012.0, True),
+        ],
+        api_trips=[ApiTrip(at(2), at(9)), ApiTrip(at(17), at(19))],
+    )
+    first, second = drives_of(r)
+    assert not first.in_progress and second.in_progress

@@ -121,18 +121,57 @@ def drive_runs(driving: list[DrivingReading]):
         yield start, run, None
 
 
+def split_by_trips(start, run, end, api_trips):
+    """Split one polled run into the car's own trips.
+
+    Short stops between trips often fall between two polls, so polling sees one long drive. The API's
+    trip list knows better: readings are cut at the midpoint between one trip's end and the next one's
+    start. A trip with no reading of its own can't be measured, so it stays with a neighbour.
+    Yields (start reading, first moving reading, last reading, end reading or None while driving, trips).
+    """
+    last = end or run[-1]
+    trips = [t for t in api_trips if start.ts < t.start <= last.ts]
+    if len(trips) < 2:
+        yield start, run[0], last, end, trips
+        return
+    cuts = [a.end + (b.start - a.end) / 2 for a, b in zip(trips, trips[1:], strict=False)]
+    groups: list[tuple[list, list]] = [([], [trip]) for trip in trips]
+    for reading in run:
+        groups[bisect_right(cuts, reading.ts)][0].append(reading)
+    merged: list[tuple[list, list]] = []
+    for readings, group_trips in groups:
+        if merged and not merged[-1][0]:  # previous trip had no reading: join it to this one
+            merged[-1] = (readings, merged[-1][1] + group_trips)
+        else:
+            merged.append((readings, group_trips))
+    if len(merged) > 1 and not merged[-1][0]:
+        _, tail_trips = merged.pop()
+        merged[-1] = (merged[-1][0], merged[-1][1] + tail_trips)
+
+    segment_start = start
+    for i, (readings, group_trips) in enumerate(merged):
+        if i == len(merged) - 1:
+            yield segment_start, readings[0], end or readings[-1], end, group_trips
+        else:
+            yield segment_start, readings[0], readings[-1], readings[-1], group_trips
+            segment_start = readings[-1]
+
+
 def derive_drives(
     r: Readings, capacity_kwh: float, home: tuple[float, float] | None, radius_km: float
 ) -> list[Drive]:
     drives = []
     battery, locations = Timeline(r.battery), Timeline(r.location)
-    for start, run, end in drive_runs(r.driving):
-        last = end or run[-1]
-        trips = [t for t in r.api_trips if start.ts < t.start <= last.ts]
+    segments = (
+        segment
+        for start, run, end in drive_runs(r.driving)
+        for segment in split_by_trips(start, run, end, r.api_trips)
+    )
+    for start, first, last, end, trips in segments:
         if trips:
             start_ts, end_ts = trips[0].start, max(t.end for t in trips)
         else:
-            start_ts = run[0].ts if run[0].ignition_on else start.ts
+            start_ts = first.ts if first.ignition_on else start.ts
             end_ts = last.ts
         mid_ts = start_ts + (end_ts - start_ts) / 2
 
