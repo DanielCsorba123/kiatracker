@@ -90,6 +90,15 @@ uv run kiatracker dashboard # your own data, on this computer only
 
 On Windows, Task Scheduler runs `.venv\Scripts\pythonw.exe -m kiatracker collect` with **Start in** set to the project folder, since `.env` and `data/` are found relative to it (output goes to `data/logs/`). On a Raspberry Pi, build the Docker image and use the systemd timer in [deploy/](deploy/).
 
+## Run the dashboard in Docker
+
+```bash
+docker compose up -d dashboard                 # your data:  http://127.0.0.1:8501
+docker compose --profile demo up -d demo       # demo data:  http://127.0.0.1:8502
+```
+
+The container mounts `data/` read-only, so the collector and `kiatracker build` keep running on the host and the dashboard picks up each rebuild. Ports are published on `127.0.0.1` only. The image never contains `data/` or `.env` (see `.dockerignore`), and the same image runs on a Raspberry Pi.
+
 ## Development
 
 ```bash

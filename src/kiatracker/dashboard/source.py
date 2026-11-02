@@ -18,6 +18,7 @@ from kiatracker.synthetic import FAKE_HOME, generate
 
 DEMO_ENV = "KIATRACKER_DEMO"
 PERSONAL_ENV = "KIATRACKER_PERSONAL"
+CONTAINER_ENV = "KIATRACKER_IN_CONTAINER"
 OFF = {"", "0", "false", "no", "off"}
 LOCAL_ADDRESSES = {"127.0.0.1", "localhost", "::1"}
 
@@ -38,6 +39,15 @@ def resolve_source(personal_db: Path, environ: Mapping[str, str] = os.environ) -
 def is_local_only(address: str | None) -> bool:
     """True if the server only listens on this computer. Streamlit's default (unset) means every interface."""
     return address in LOCAL_ADDRESSES
+
+
+def may_show_personal(address: str | None, environ: Mapping[str, str] = os.environ) -> bool:
+    """Personal data only when reachable from this computer alone.
+
+    Inside a container Streamlit has to listen on 0.0.0.0; KIATRACKER_IN_CONTAINER=1 declares that the
+    container's port is published on the host's 127.0.0.1 only (as docker-compose.yml does).
+    """
+    return is_local_only(address) or environ.get(CONTAINER_ENV) == "1"
 
 
 def build_demo_database(target_dir: Path | None = None, days: int = 60, seed: int = 7) -> Path:

@@ -1,0 +1,17 @@
+# Never send personal data or secrets into an image
+data/
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+spikes/probe_output/
+
+# Not needed in the image
+.git/
+.venv/
+.claude/
+.superpowers/
+**/__pycache__/
+docs/
+tests/
+spikes/

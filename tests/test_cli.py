@@ -75,3 +75,12 @@ def test_train_with_too_few_drives(tmp_path, capsys):
     assert main(["--data-dir", str(tmp_path), "build"]) == 0
     assert main(["--data-dir", str(tmp_path), "train"]) == 1
     assert "need 15 more drives" in capsys.readouterr().out
+
+
+def test_dashboard_address_can_be_set_for_containers():
+    from kiatracker.cli import dashboard_command
+
+    argv, _ = dashboard_command(demo=False, environ={}, address="0.0.0.0")
+    assert argv[argv.index("--server.address") + 1] == "0.0.0.0"
+    default, _ = dashboard_command(demo=False, environ={})
+    assert default[default.index("--server.address") + 1] == "127.0.0.1"

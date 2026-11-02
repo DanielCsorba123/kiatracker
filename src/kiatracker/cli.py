@@ -149,7 +149,11 @@ def cmd_forecast(settings: Settings, args) -> int:
 
 
 def dashboard_command(
-    demo: bool, environ: Mapping[str, str], data_dir: Path | None = None, port: int = 8501
+    demo: bool,
+    environ: Mapping[str, str],
+    data_dir: Path | None = None,
+    port: int = 8501,
+    address: str = "127.0.0.1",
 ) -> tuple[list[str], dict[str, str]]:
     """The streamlit command and environment; bound to this computer only."""
     app = Path(__file__).parent / "dashboard" / "app.py"
@@ -160,7 +164,7 @@ def dashboard_command(
         "run",
         str(app),
         "--server.address",
-        "127.0.0.1",
+        address,
         "--server.port",
         str(port),
         "--browser.gatherUsageStats",
@@ -179,8 +183,10 @@ def dashboard_command(
 
 
 def cmd_dashboard(settings: Settings, args) -> int:
-    argv, env = dashboard_command(args.demo, os.environ, settings.data_dir, args.port)
-    print(f"Dashboard on http://127.0.0.1:{args.port} ({'demo data' if args.demo else settings.data_dir})")
+    argv, env = dashboard_command(args.demo, os.environ, settings.data_dir, args.port, args.address)
+    print(
+        f"Dashboard on http://{args.address}:{args.port} ({'demo data' if args.demo else settings.data_dir})"
+    )
     return subprocess.call(argv, env=env)
 
 
@@ -200,6 +206,9 @@ def main(argv: list[str] | None = None) -> int:
     dashboard = sub.add_parser("dashboard", help="open the dashboard in your browser (this computer only)")
     dashboard.add_argument("--demo", action="store_true", help="show generated demo data, not yours")
     dashboard.add_argument("--port", type=int, default=8501)
+    dashboard.add_argument(
+        "--address", default="127.0.0.1", help="listen address; only change it inside a container"
+    )
     args = parser.parse_args(argv)
 
     settings = load_settings()

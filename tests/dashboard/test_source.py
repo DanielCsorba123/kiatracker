@@ -51,3 +51,13 @@ def test_demo_database_has_drives(tmp_path):
 def test_demo_database_defaults_to_a_private_new_folder():
     a, b = build_demo_database(days=3), build_demo_database(days=3)
     assert a.parent != b.parent and a.parent.name.startswith("kiatracker-demo-")
+
+
+def test_personal_data_only_on_localhost_unless_container_publishes_locally():
+    from kiatracker.dashboard.source import may_show_personal
+
+    assert may_show_personal("127.0.0.1", environ={})
+    assert not may_show_personal("0.0.0.0", environ={})
+    # in a container the server must listen on 0.0.0.0; compose publishes the port on the host's 127.0.0.1
+    assert may_show_personal("0.0.0.0", environ={"KIATRACKER_IN_CONTAINER": "1"})
+    assert not may_show_personal("0.0.0.0", environ={"KIATRACKER_IN_CONTAINER": "true"})

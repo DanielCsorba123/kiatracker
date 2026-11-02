@@ -1,0 +1,26 @@
+# docker compose up -d dashboard            your data at http://127.0.0.1:8501
+# docker compose --profile demo up -d demo  generated demo data at http://127.0.0.1:8502
+#
+# Ports are published on 127.0.0.1 only, so nothing is reachable from your network. Inside the container
+# Streamlit has to listen on 0.0.0.0; KIATRACKER_IN_CONTAINER=1 tells the app that this mapping is what
+# keeps it local. Don't change the ports to "8501:8501" while showing personal data.
+services:
+  dashboard:
+    build: .
+    image: kiatracker
+    command: ["dashboard", "--address", "0.0.0.0"]
+    environment:
+      KIATRACKER_IN_CONTAINER: "1"
+    volumes:
+      - ./data:/data:ro # read-only: the collector and `kiatracker build` keep running on the host
+    ports:
+      - "127.0.0.1:8501:8501"
+    restart: unless-stopped
+
+  demo:
+    image: kiatracker
+    build: .
+    command: ["dashboard", "--demo", "--address", "0.0.0.0"]
+    ports:
+      - "127.0.0.1:8502:8501"
+    profiles: ["demo"]
