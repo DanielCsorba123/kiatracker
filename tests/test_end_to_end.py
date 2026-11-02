@@ -57,3 +57,14 @@ def test_demo_drives_have_weather(tmp_path):
         winds = con.execute("select min(wind_kph), max(wind_kph) from drive_weather").fetchone()
     assert counts["drive_weather"] == located > 0
     assert winds[0] < winds[1]  # wind varies from day to day
+
+
+def test_demo_charging_habits_vary(tmp_path):
+    settings = Settings(None, None, tmp_path, home=FAKE_HOME, home_radius_km=0.3)
+    generate(settings.raw_dir, START, days=60, seed=5)
+    build_database(settings)
+    with duckdb.connect(str(settings.db_path), read_only=True) as con:
+        ends = {round(e) for (e,) in con.execute("select soc_end from charging_sessions").fetchall()}
+        starts = [s for (s,) in con.execute("select soc_start from charging_sessions").fetchall()]
+    assert len(ends) >= 2  # owners don't always charge to the same limit
+    assert max(starts) - min(starts) > 15

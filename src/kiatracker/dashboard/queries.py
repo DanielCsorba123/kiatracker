@@ -127,6 +127,7 @@ def consumption_by_band(con, period: Period, column: str, edges: list[float]) ->
     d = drives(con, period)
     d = d[d["kwh_per_100km"].notna() & d[column].notna()]
     labels = [f"{a:g} to {b:g}" for a, b in zip(edges, edges[1:], strict=False)]
+    labels[0], labels[-1] = f"under {edges[1]:g}", f"{edges[-2]:g}+"  # outer edges are only catch-alls
     d["band"] = pd.cut(d[column], edges, labels=labels, right=False)
     rows = []
     for band, group in d.groupby("band", observed=True):

@@ -12,8 +12,8 @@ def render(con, period: queries.Period) -> None:
             ("Distance", number(k["distance_km"], "km"), None),
             ("Drives", number(k["drives"]), None),
             (
-                "Consumption",
-                number(k["kwh_per_100km"], "kWh/100 km", 1),
+                "Consumption (kWh/100 km)",
+                number(k["kwh_per_100km"], digits=1),
                 "Distance-weighted over drives of 5 km or more; shorter ones are too short to measure.",
             ),
             (

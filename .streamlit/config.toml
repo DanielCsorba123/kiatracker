@@ -7,3 +7,6 @@ headless = true
 
 [theme]
 primaryColor = "#2a78d6"
+
+[client]
+toolbarMode = "viewer"  # hide developer options such as Deploy

@@ -46,7 +46,7 @@ def test_drives_table_is_local_time_with_weather(demo, all_time):
 
 def test_cold_costs_more_in_demo(demo, all_time):
     bands = q.consumption_by_band(demo, all_time, "temp_c", [-20, 5, 40])
-    assert list(bands["band"]) == ["-20 to 5", "5 to 40"]
+    assert list(bands["band"]) == ["under 5", "5+"]
     assert bands["kwh_per_100km"].iloc[0] > bands["kwh_per_100km"].iloc[1]
 
 
@@ -92,3 +92,8 @@ def test_costs_arithmetic(tiny):
     assert row["electricity_cost"] == pytest.approx(20 / 0.9 * 50)
     assert row["petrol_cost"] == pytest.approx(100 * 6 / 100 * 600)
     assert row["savings"] == pytest.approx(row["petrol_cost"] - row["electricity_cost"])
+
+
+def test_middle_bands_show_both_edges(demo, all_time):
+    bands = q.consumption_by_band(demo, all_time, "temp_c", [-30, 0, 10, 45])
+    assert list(bands["band"]) == ["under 0", "0 to 10", "10+"]

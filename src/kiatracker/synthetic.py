@@ -107,12 +107,12 @@ class Car:
             if end - t < timedelta(minutes=1):  # the car never sends two readings within the same second
                 t = end
 
-    def charge(self, start: datetime, temp: float) -> datetime:
+    def charge(self, start: datetime, temp: float, limit: float) -> datetime:
         t = start
-        while self.soc < 90:
+        while self.soc < limit:
             self.report(t, ignition_on=False, charging=True, temp=temp)
             t += timedelta(minutes=15)
-            self.soc = min(90.0, self.soc + CHARGE_KW * 0.25 / CAPACITY_KWH * 100)
+            self.soc = min(limit, self.soc + CHARGE_KW * 0.25 / CAPACITY_KWH * 100)
         self.report(t, ignition_on=False, charging=False, temp=temp)
         return t
 
@@ -167,8 +167,8 @@ def generate(raw_dir: Path, start: datetime, days: int, seed: int = 7) -> list[d
                 truth.append({"start": t.isoformat(), "end": end.isoformat(), "distance_km": km})
                 day_trips.append((t, end))
                 t = end + timedelta(hours=rng.uniform(0.5, 8))
-        if car.soc < 50:
-            busy_until = car.charge(t + timedelta(minutes=10), temp)
+        if car.soc < rng.uniform(25, 60):  # plug in when it feels low, not at a fixed level
+            busy_until = car.charge(t + timedelta(minutes=10), temp, limit=rng.choice([80, 80, 90, 100]))
         else:
             busy_until = t
         fetched = midnight + timedelta(days=1)

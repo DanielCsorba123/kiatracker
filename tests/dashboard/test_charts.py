@@ -40,3 +40,31 @@ def test_scatter_tooltip_lists_fields():
 def test_histogram_bins_by_step():
     spec = charts.histogram(DF, "km", "Plug-in charge", step=10).to_dict()
     assert '"step": 10' in str(spec).replace("'", '"')
+
+
+def test_weekly_bars_use_the_exact_monday_not_vega_sunday_weeks():
+    spec = str(charts.bar(DF, "week:T", "km:Q", "Distance per week", "km").to_dict())
+    assert "yearweek" not in spec and "yearmonthdate" in spec
+
+
+def test_drive_time_tooltip_is_not_called_week():
+    df = DF.assign(start_local=DF["week"])
+    chart = charts.scatter(df, "temp:Q", "cons:Q", "t", "x", "y", tooltip=["start_local:T"])
+    tip = encodings(chart)["tooltip"][0]
+    assert tip["title"] == "Start" and "%H:%M" in tip["format"]
+
+
+def test_band_bars_keep_data_order_not_alphabetical():
+    bands = pd.DataFrame({"band": ["-30 to 0", "5 to 10", "10 to 15"], "v": [20.0, 17.0, 15.0]})
+    x = encodings(charts.bar(bands, "band:O", "v:Q", "t", "y"))["x"]
+    assert x["sort"] is None
+
+
+def test_histogram_axis_shows_whole_percent():
+    x = encodings(charts.histogram(DF, "km", "t", step=10))["x"]
+    assert x["axis"]["format"] == "d"
+
+
+def test_histogram_can_fix_its_range():
+    x = encodings(charts.histogram(DF, "km", "t", step=10, extent=(0, 100)))["x"]
+    assert x["bin"]["extent"] == [0, 100] and x["scale"]["domain"] == [0, 100]

@@ -18,13 +18,22 @@ def _base(df: pd.DataFrame, title: str) -> alt.Chart:
 
 def _x(field: str, title: str | None):
     if field.endswith(":T"):
-        return alt.X(field, timeUnit="yearweek", title=title, axis=alt.Axis(format="%d %b", grid=False))
-    return alt.X(field, title=title, axis=alt.Axis(grid=False, labelAngle=0))
+        # One band per week at its Monday; Vega's "yearweek" would snap to Sundays.
+        return alt.X(
+            field.replace(":T", ":O"),
+            timeUnit="yearmonthdate",
+            title=title,
+            axis=alt.Axis(format="%d %b", grid=False, labelAngle=0),
+        )
+    # sort=None keeps the data's order, so bands like "5 to 10" come before "10 to 15"
+    return alt.X(field, title=title, sort=None, axis=alt.Axis(grid=False, labelAngle=0))
 
 
 def _tip(field: str, title: str | None = None):
+    if field.startswith("week") and field.endswith(":T"):
+        return alt.Tooltip(field, title=title or "Week of", timeUnit="yearmonthdate", format="%d %b %Y")
     if field.endswith(":T"):
-        return alt.Tooltip(field, title=title or "Week of", timeUnit="yearweek", format="%d %b %Y")
+        return alt.Tooltip(field, title=title or "Start", format="%d %b %Y %H:%M")
     return (
         alt.Tooltip(field, title=title, format=",.1f")
         if field.endswith(":Q")
@@ -69,14 +78,21 @@ def scatter(
 
 
 def histogram(
-    df: pd.DataFrame, column: str, title: str, step: float, x_title: str | None = None
+    df: pd.DataFrame,
+    column: str,
+    title: str,
+    step: float,
+    x_title: str | None = None,
+    extent: tuple[float, float] | None = None,
 ) -> alt.Chart:
+    bins = alt.Bin(step=step, extent=list(extent)) if extent else alt.Bin(step=step)
+    scale = alt.Scale(domain=list(extent)) if extent else alt.Undefined
     return (
         _base(df, title)
         .mark_bar(color=BLUE, cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
         .encode(
-            x=alt.X(f"{column}:Q", bin=alt.Bin(step=step), title=x_title or column),
+            x=alt.X(f"{column}:Q", bin=bins, scale=scale, title=x_title or column, axis=alt.Axis(format="d")),
             y=alt.Y("count():Q", title="Sessions"),
-            tooltip=[alt.Tooltip(f"{column}:Q", bin=alt.Bin(step=step), title=x_title), "count():Q"],
+            tooltip=[alt.Tooltip(f"{column}:Q", bin=bins, title=x_title), "count():Q"],
         )
     )

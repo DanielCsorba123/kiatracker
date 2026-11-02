@@ -39,11 +39,11 @@ def render(con, period: queries.Period) -> None:
     )
     left, right = st.columns(2)
     left.altair_chart(
-        charts.histogram(sessions, "soc_start", "Battery % when plugged in", 10, "Battery %"),
+        charts.histogram(sessions, "soc_start", "Battery % when plugged in", 10, "Battery %", (0, 100)),
         width="stretch",
     )
     right.altair_chart(
-        charts.histogram(sessions, "soc_end", "Battery % when charging stopped", 10, "Battery %"),
+        charts.histogram(sessions, "soc_end", "Battery % when charging stopped", 10, "Battery %", (0, 100)),
         width="stretch",
     )
 

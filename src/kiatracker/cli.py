@@ -3,8 +3,11 @@
 import argparse
 import dataclasses
 import json
+import os
 import shutil
+import subprocess
 import sys
+from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -81,6 +84,36 @@ def cmd_stats(settings: Settings, args) -> int:
     return 0
 
 
+def dashboard_command(
+    demo: bool, environ: Mapping[str, str], data_dir: Path | None = None, port: int = 8501
+) -> tuple[list[str], dict[str, str]]:
+    """The streamlit command and environment; bound to this computer only."""
+    app = Path(__file__).parent / "dashboard" / "app.py"
+    argv = [
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        str(app),
+        "--server.address",
+        "127.0.0.1",
+        "--server.port",
+        str(port),
+    ]
+    env = dict(environ)
+    if demo:
+        env["KIATRACKER_DEMO"] = "1"
+    if data_dir:
+        env["KIATRACKER_DATA_DIR"] = str(data_dir)
+    return argv, env
+
+
+def cmd_dashboard(settings: Settings, args) -> int:
+    argv, env = dashboard_command(args.demo, os.environ, settings.data_dir, args.port)
+    print(f"Dashboard on http://127.0.0.1:{args.port} ({'demo data' if args.demo else settings.data_dir})")
+    return subprocess.call(argv, env=env)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="kiatracker", description=__doc__)
     parser.add_argument("--data-dir", type=Path, help="overrides KIATRACKER_DATA_DIR")
@@ -91,6 +124,9 @@ def main(argv: list[str] | None = None) -> int:
     demo = sub.add_parser("demo", help="generate fake data into <data-dir>/demo and build it")
     demo.add_argument("--days", type=int, default=30)
     sub.add_parser("stats", help="print a summary without coordinates")
+    dashboard = sub.add_parser("dashboard", help="open the dashboard in your browser (this computer only)")
+    dashboard.add_argument("--demo", action="store_true", help="show generated demo data, not yours")
+    dashboard.add_argument("--port", type=int, default=8501)
     args = parser.parse_args(argv)
 
     settings = load_settings()
@@ -106,5 +142,6 @@ def main(argv: list[str] | None = None) -> int:
         "weather": cmd_weather,
         "demo": cmd_demo,
         "stats": cmd_stats,
+        "dashboard": cmd_dashboard,
     }
     return commands[args.command](settings, args)

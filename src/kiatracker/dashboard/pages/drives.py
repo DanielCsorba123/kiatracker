@@ -14,7 +14,10 @@ def weather_cost_caption(bands) -> str | None:
         return None
     cold, mild = bands.iloc[0], bands.iloc[-1]
     extra = cold["kwh_per_100km"] / mild["kwh_per_100km"] - 1
-    return f"At {cold['band']} °C the car used {extra:.0%} more energy per km than at {mild['band']} °C."
+    return (
+        f"In the coldest band ({cold['band']} °C) the car used {extra:.0%} more energy per km "
+        f"than in the mildest ({mild['band']} °C)."
+    )
 
 
 def render(con, period: queries.Period) -> None:
