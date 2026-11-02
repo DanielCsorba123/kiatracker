@@ -7,7 +7,21 @@ from kiatracker.dashboard import charts, queries
 from kiatracker.dashboard.ui import empty, number, tiles
 from kiatracker.forecast.model import NotEnoughData
 from kiatracker.forecast.outlook import LOCAL, daily_outlook, range_interval
-from kiatracker.forecast.train import car_state, train
+from kiatracker.forecast.train import Trained, car_state, train
+
+
+def fingerprint(con) -> tuple:
+    """Cheap summary that changes whenever the drives or weather change, to key the trained model on."""
+    return con.execute(
+        """select (select count(*) from drives), (select max(end_ts) from drives),
+                  (select count(*) from drive_weather), (select count(*) from readings_location)"""
+    ).fetchone()
+
+
+@st.cache_data(max_entries=4, show_spinner="Training the range model…")
+def cached_train(key: tuple, _con) -> Trained:
+    """Training reads every GPS point and runs several fits, so don't redo it on each slider move."""
+    return train(_con)
 
 
 def forecast_hourly(con) -> dict | None:
@@ -43,7 +57,7 @@ def km_range(lo, mid, hi) -> str:
 def render(con, period: queries.Period) -> None:
     st.title("Range")
     try:
-        trained = train(con)
+        trained = cached_train(fingerprint(con), con)
     except NotEnoughData as err:
         empty(
             f"The range model needs {err.needed} more drives of 5 km or more with weather. "

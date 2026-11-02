@@ -123,16 +123,22 @@ def cmd_forecast(settings: Settings, args) -> int:
         cell = weather_cell(con, settings.home)
         speed = median([r["speed_kph"] for r in drive_features(con)] or [DEFAULT_SPEED])
     if not args.offline and cell:
-        with httpx.Client() as http:
-            fetch_forecast(cell, settings.raw_dir, http, datetime.now(UTC))
+        try:
+            with httpx.Client() as http:
+                fetch_forecast(cell, settings.raw_dir, http, datetime.now(UTC))
+        except httpx.HTTPError as err:
+            print(
+                f"Couldn't fetch a new forecast ({type(err).__name__}); using the last one if there is one."
+            )
     hourly = latest_forecast(settings.raw_dir)
     if not hourly:
         print("No forecast available: run `kiatracker forecast` with a network connection.")
         return 1
-    print(f"Battery {soc}%, typical speed {speed:.0f} km/h. Daytime range by day:")
 
     def km(value):
         return "-" if value is None else f"{value:.0f}"
+
+    print(f"Battery {km(soc)}%, typical speed {speed:.0f} km/h. Daytime range by day:")
 
     for day in daily_outlook(hourly, model, soc, capacity, speed, datetime.now(LOCAL).date()):
         print(

@@ -1,13 +1,14 @@
 """Physics-informed consumption model: kWh/100 km = c0 + aero·(v + headwind)² + heat·max(0, 18 − T)/v.
 
 Three interpretable coefficients fitted by distance-weighted least squares, so it works with tens of drives,
-extrapolates sensibly to weather it hasn't seen, and explains itself. A coefficient that comes out negative
-(a physically impossible "cold saves energy") is dropped and the rest refitted.
+extrapolates sensibly to weather it hasn't seen, and explains itself. Every coefficient is kept non-negative:
+a negative one (cold "saving" energy, or a negative base load) is physically impossible.
 """
 
 import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from itertools import chain, combinations
 from pathlib import Path
 
 import numpy as np
@@ -62,19 +63,26 @@ class RangeModel:
 
 
 def fit_coefficients(rows: list[dict], features: tuple[str, ...] = FEATURES) -> dict[str, float]:
-    """Distance-weighted least squares with an intercept; negative feature costs are dropped and refitted."""
-    active = list(features)
-    y = np.array([r["kwh_per_100km"] for r in rows])
-    w = np.sqrt(np.array([r["distance_km"] for r in rows]))  # longer drives are measured more precisely
-    while True:
-        x = np.column_stack([np.ones(len(rows))] + [[r[f] for r in rows] for f in active])
+    """Distance-weighted least squares with every coefficient, the intercept included, kept non-negative.
+
+    With three parameters, exact non-negative least squares is cheap: fit each subset of free coefficients
+    (the rest held at zero) and keep the feasible fit with the smallest weighted error.
+    """
+    names = ("c0", *features)
+    y = np.array([r["kwh_per_100km"] for r in rows], dtype=float)
+    w = np.sqrt(np.array([r["distance_km"] for r in rows], dtype=float))  # longer drives are measured better
+    columns = {"c0": np.ones(len(rows))} | {f: np.array([r[f] for r in rows], dtype=float) for f in features}
+    best, best_error = dict.fromkeys(names, 0.0), float(np.sum((y * w) ** 2))
+    for free in chain.from_iterable(combinations(names, k) for k in range(1, len(names) + 1)):
+        x = np.column_stack([columns[n] for n in free])
         beta, *_ = np.linalg.lstsq(x * w[:, None], y * w, rcond=None)
-        negative = [f for f, b in zip(active, beta[1:], strict=True) if b < 0]
-        if not negative:
-            coef = {"c0": float(beta[0]), **dict.fromkeys(features, 0.0)}
-            coef.update({f: float(b) for f, b in zip(active, beta[1:], strict=True)})
-            return coef
-        active.remove(min(negative, key=lambda f: beta[1 + active.index(f)]))
+        if np.any(beta < 0):
+            continue
+        error = float(np.sum(((y - x @ beta) * w) ** 2))
+        if error < best_error:
+            best = dict.fromkeys(names, 0.0) | {n: float(b) for n, b in zip(free, beta, strict=True)}
+            best_error = error
+    return best
 
 
 def predict_rows(coef: dict[str, float], rows: list[dict]) -> np.ndarray:

@@ -59,9 +59,9 @@ How far will the current charge really go in tomorrow's weather? The model is a 
 kWh/100 km = c0 + c_aero · (v + headwind)² + c_heat · max(0, 18 °C − T) / v
 ```
 
-- **Air resistance** grows with the square of airspeed. Headwind is the hour's wind projected onto the direction of travel, taken from the car's GPS points along each drive. Without a known route, wind averages out to v² + w²/2: on a round trip it always costs range.
+- **Air resistance** grows with the square of airspeed. For each stretch between the car's GPS points, the hour's wind is projected onto the direction of travel, and (v + headwind)² is averaged along the drive: out and back into the wind still costs, even though the average headwind is zero. Without a known route, wind averages out to v² + w²/2.
 - **Heating** draws roughly constant power, so its energy per km scales with time per km. Slow, cold trips cost the most.
-- **Fitting:** distance-weighted least squares. A coefficient that comes out negative (cold "saving" energy) is dropped and the rest refitted. It needs 15 drives to start.
+- **Fitting:** distance-weighted least squares with every coefficient, the base included, kept non-negative. Cold "saving" energy is physically impossible, so the fit searches the combinations of free and zeroed coefficients. It needs 15 drives to start.
 - **Honest evaluation:** a time-ordered backtest that only ever trains on earlier drives, against two baselines. The 10th-90th percentile of the out-of-sample errors becomes the range interval.
 - **Validated on known truth:** the simulator drives with known coefficients, and a test checks the fit recovers them within 15 %. On 60 demo days the backtest error is 1.1 kWh/100 km, against 1.8 for a temperature-only line and 2.1 for the mean.
 

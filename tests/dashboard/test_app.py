@@ -86,3 +86,11 @@ def test_range_page_with_too_few_drives_says_how_many_more(tmp_path):
     at = run_page("range", build_demo_database(tmp_path, days=3))
     assert not at.exception
     assert any("more drives" in info.value for info in at.info)
+
+
+def test_range_training_fingerprint_tracks_the_data(demo_db, empty_db_path):
+    from kiatracker.dashboard.pages.range import fingerprint
+    from kiatracker.dashboard.queries import connect
+
+    with connect(demo_db) as a, connect(demo_db) as b, connect(empty_db_path) as c:
+        assert fingerprint(a) == fingerprint(b) != fingerprint(c)

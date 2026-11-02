@@ -25,10 +25,22 @@ def test_recovers_the_simulators_true_physics(demo):
 
 
 def test_negative_cost_is_dropped_and_refit():
-    # consumption falls as "heat" rises: physically impossible, so heat must get no cost
-    rows = [row(aero=2500 + 100 * i, heat=i / 10, kwh=15 + 0.001 * 100 * i - 0.5 * i) for i in range(20)]
+    # independent aero and heat; consumption falls as "heat" rises, which is physically impossible
+    rows = [
+        row(aero=2500 + 300 * (i % 5), heat=(i % 4) / 10, kwh=12 + 0.002 * 300 * (i % 5) - 3 * (i % 4) / 10)
+        for i in range(20)
+    ]
     model = fit(rows)
-    assert model.coef["heat"] == 0 and model.coef["aero"] >= 0
+    assert model.coef["heat"] == 0
+    assert model.coef["aero"] == pytest.approx(0.002, rel=0.05)
+
+
+def test_intercept_is_never_negative():
+    # a narrow speed band makes the unconstrained intercept negative
+    rows = [row(aero=2400 + 10 * i, heat=0.1, kwh=-5 + 0.008 * (2400 + 10 * i)) for i in range(20)]
+    model = fit(rows)
+    assert all(value >= 0 for value in model.coef.values())
+    assert model.predict(30, 25, 30**2) > 0
 
 
 def test_too_few_drives_says_how_many_more():

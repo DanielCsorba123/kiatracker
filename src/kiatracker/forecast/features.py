@@ -7,7 +7,7 @@ from bisect import bisect_left, bisect_right
 
 import duckdb
 
-from kiatracker.geo import path_headwind
+from kiatracker.geo import path_airspeed_sq, path_headwind
 
 T_BASE = 18.0  # °C below which heating draws power
 MIN_KM = 5.0  # shorter drives are too coarse to measure (0.5 % SOC steps)
@@ -65,7 +65,7 @@ def drive_features(con: duckdb.DuckDBPyConnection) -> list[dict]:
                 "temp_c": temp,
                 "wind_kph": wind,
                 "headwind_kph": headwind,
-                **physics(speed, temp, (speed + headwind) ** 2),
+                **physics(speed, temp, path_airspeed_sq(points, speed, wind, wind_from)),
                 "kwh_per_100km": kwh100,
             }
         )

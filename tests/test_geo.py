@@ -27,3 +27,20 @@ def test_path_headwind_is_distance_weighted():
 def test_path_without_movement_has_no_headwind():
     assert path_headwind([(47.0, 18.0), (47.0, 18.0)], 30, 0) == 0
     assert path_headwind([(47.0, 18.0)], 30, 0) == 0
+
+
+def test_out_and_back_into_wind_costs_more_than_still_air():
+    """North then back south in a 20 km/h north wind: mean headwind 0, but drag sees (v+w)² and (v-w)²."""
+    from kiatracker.geo import path_airspeed_sq
+
+    points = [(47.0, 18.0), (47.1, 18.0), (47.0, 18.0)]
+    assert path_headwind(points, 20, 0) == pytest.approx(0, abs=1e-6)
+    assert path_airspeed_sq(points, 50, 20, 0) == pytest.approx(
+        ((50 + 20) ** 2 + (50 - 20) ** 2) / 2, rel=1e-6
+    )
+
+
+def test_unknown_path_assumes_wind_from_all_directions():
+    from kiatracker.geo import path_airspeed_sq
+
+    assert path_airspeed_sq([(47.0, 18.0)], 50, 20, 0) == 50**2 + 20**2 / 2
