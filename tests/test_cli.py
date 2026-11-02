@@ -58,3 +58,20 @@ def test_dashboard_command_turns_off_usage_stats_and_error_details():
     assert env["KIATRACKER_PERSONAL"] == "1"
     _, demo_env = dashboard_command(demo=True, environ={})
     assert "KIATRACKER_PERSONAL" not in demo_env
+
+
+def test_train_and_forecast_on_demo_data(tmp_path, capsys):
+    assert main(["--data-dir", str(tmp_path), "demo", "--days", "40"]) == 0
+    demo = str(tmp_path / "demo")
+    assert main(["--data-dir", demo, "train"]) == 0
+    out = capsys.readouterr().out
+    assert "MAE" in out and "headwind" in out
+    assert (tmp_path / "demo" / "models" / "range.json").exists()
+    assert main(["--data-dir", demo, "forecast", "--offline"]) == 0
+    assert "km" in capsys.readouterr().out
+
+
+def test_train_with_too_few_drives(tmp_path, capsys):
+    assert main(["--data-dir", str(tmp_path), "build"]) == 0
+    assert main(["--data-dir", str(tmp_path), "train"]) == 1
+    assert "need 15 more drives" in capsys.readouterr().out

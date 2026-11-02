@@ -1,4 +1,5 @@
-"""Command line: kiatracker [--data-dir DIR] collect | build | weather | demo | stats."""
+"""Command line: kiatracker [--data-dir DIR] collect | build | weather | train | forecast | demo | stats |
+dashboard."""
 
 import argparse
 import dataclasses
@@ -10,12 +11,18 @@ import sys
 from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from statistics import median
 
+import duckdb
 import httpx
 
 from kiatracker.collect import poll
 from kiatracker.config import Settings, load_settings
 from kiatracker.db import build_database, derive_all, stats
+from kiatracker.forecast.features import drive_features
+from kiatracker.forecast.model import NotEnoughData, RangeModel
+from kiatracker.forecast.outlook import LOCAL, daily_outlook, fetch_forecast, latest_forecast
+from kiatracker.forecast.train import DEFAULT_SPEED, MODEL_FILE, car_state, train, weather_cell
 from kiatracker.pleos import PleosClient, PleosError
 from kiatracker.synthetic import FAKE_HOME, generate
 from kiatracker.weather import fetch_weather
@@ -84,6 +91,57 @@ def cmd_stats(settings: Settings, args) -> int:
     return 0
 
 
+def cmd_train(settings: Settings, args) -> int:
+    if not settings.db_path.exists():
+        print("No database yet: run `kiatracker build` first.")
+        return 1
+    with duckdb.connect(str(settings.db_path), read_only=True) as con:
+        try:
+            trained = train(con)
+        except NotEnoughData as err:
+            print(f"Can't train yet: {err}.")
+            return 1
+    trained.model.save(settings.data_dir / MODEL_FILE)
+    print(f"Trained on {trained.model.n_drives} drives.")
+    if trained.backtest:
+        print("Backtest, predicting later drives from earlier ones (MAE, kWh/100 km):")
+        for name in ("model", "temperature_only", "mean"):
+            print(f"  {name:17} {trained.backtest[name]['mae']:.2f}")
+    for line in trained.model.explain(trained.typical_speed_kph):
+        print(line)
+    return 0
+
+
+def cmd_forecast(settings: Settings, args) -> int:
+    model_path = settings.data_dir / MODEL_FILE
+    if not model_path.exists() or not settings.db_path.exists():
+        print("No model yet: run `kiatracker train` first.")
+        return 1
+    model = RangeModel.load(model_path)
+    with duckdb.connect(str(settings.db_path), read_only=True) as con:
+        soc, capacity = car_state(con)
+        cell = weather_cell(con, settings.home)
+        speed = median([r["speed_kph"] for r in drive_features(con)] or [DEFAULT_SPEED])
+    if not args.offline and cell:
+        with httpx.Client() as http:
+            fetch_forecast(cell, settings.raw_dir, http, datetime.now(UTC))
+    hourly = latest_forecast(settings.raw_dir)
+    if not hourly:
+        print("No forecast available: run `kiatracker forecast` with a network connection.")
+        return 1
+    print(f"Battery {soc}%, typical speed {speed:.0f} km/h. Daytime range by day:")
+
+    def km(value):
+        return "-" if value is None else f"{value:.0f}"
+
+    for day in daily_outlook(hourly, model, soc, capacity, speed, datetime.now(LOCAL).date()):
+        print(
+            f"  {day['day']:%a %d %b}: {day['temp_c']:.0f} °C, wind {day['wind_kph']:.0f} km/h -> "
+            f"{km(day['range_km'])} km ({km(day['range_lo'])}-{km(day['range_hi'])})"
+        )
+    return 0
+
+
 def dashboard_command(
     demo: bool, environ: Mapping[str, str], data_dir: Path | None = None, port: int = 8501
 ) -> tuple[list[str], dict[str, str]]:
@@ -130,6 +188,9 @@ def main(argv: list[str] | None = None) -> int:
     demo = sub.add_parser("demo", help="generate fake data into <data-dir>/demo and build it")
     demo.add_argument("--days", type=int, default=30)
     sub.add_parser("stats", help="print a summary without coordinates")
+    sub.add_parser("train", help="fit the range model on your drives and show how well it predicts")
+    forecast = sub.add_parser("forecast", help="range for today and the next days in the forecast weather")
+    forecast.add_argument("--offline", action="store_true", help="use the last fetched forecast")
     dashboard = sub.add_parser("dashboard", help="open the dashboard in your browser (this computer only)")
     dashboard.add_argument("--demo", action="store_true", help="show generated demo data, not yours")
     dashboard.add_argument("--port", type=int, default=8501)
@@ -138,6 +199,8 @@ def main(argv: list[str] | None = None) -> int:
     settings = load_settings()
     if args.data_dir:
         settings = dataclasses.replace(settings, data_dir=args.data_dir.resolve())
+    if sys.stdout is not None and not sys.stdout.isatty():
+        sys.stdout.reconfigure(encoding="utf-8")  # pipes and logs: keep °C readable on Windows
     if sys.stdout is None:  # pythonw under Task Scheduler has no console
         log_dir = settings.data_dir / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
@@ -149,5 +212,7 @@ def main(argv: list[str] | None = None) -> int:
         "demo": cmd_demo,
         "stats": cmd_stats,
         "dashboard": cmd_dashboard,
+        "train": cmd_train,
+        "forecast": cmd_forecast,
     }
     return commands[args.command](settings, args)
