@@ -51,6 +51,40 @@ def bar(
     )
 
 
+def predicted_vs_actual(df: pd.DataFrame, unit: str) -> alt.LayerChart:
+    """Backtest predictions against what happened, on equal axes with a dashed perfect-prediction line."""
+    values = pd.concat([df["predicted"], df["actual"]])
+    domain = [float(values.min()), float(values.max())]
+    scale = alt.Scale(domain=domain, zero=False)
+    base = _base(df, "Predicted vs actual consumption")
+    points = base.mark_circle(color=BLUE, size=70, opacity=0.75, stroke="white", strokeWidth=1).encode(
+        x=alt.X("predicted:Q", title=f"Predicted {unit}", scale=scale),
+        y=alt.Y("actual:Q", title=f"Actual {unit}", scale=scale),
+        tooltip=[_tip("predicted:Q", "Predicted"), _tip("actual:Q", "Actual")],
+    )
+    line_df = pd.DataFrame({"predicted": domain, "actual": domain})
+    diagonal = (
+        alt.Chart(line_df)
+        .mark_line(color="#52514e", strokeDash=[4, 4], strokeWidth=1)
+        .encode(x=alt.X("predicted:Q", scale=scale), y=alt.Y("actual:Q", scale=scale))
+    )
+    return alt.layer(points, diagonal)
+
+
+def bar_with_interval(
+    df: pd.DataFrame, x: str, y: str, lo: str, hi: str, title: str, y_title: str
+) -> alt.LayerChart:
+    """Bars for the expected value with a whisker for the likely range (e.g. 10th-90th percentile)."""
+    base = _base(df, title)
+    bars = base.mark_bar(color=BLUE, cornerRadiusTopLeft=4, cornerRadiusTopRight=4, opacity=0.5).encode(
+        x=_x(x, None),
+        y=alt.Y(f"{y}:Q", title=y_title),
+        tooltip=[_tip(x), _tip(f"{y}:Q", "Expected"), _tip(f"{lo}:Q", "Low"), _tip(f"{hi}:Q", "High")],
+    )
+    whiskers = base.mark_rule(color="#0b0b0b", strokeWidth=2).encode(x=_x(x, None), y=f"{lo}:Q", y2=f"{hi}:Q")
+    return alt.layer(bars, whiskers)
+
+
 def line(df: pd.DataFrame, x: str, y: str, title: str, y_title: str, color: str = BLUE) -> alt.Chart:
     return (
         _base(df, title)

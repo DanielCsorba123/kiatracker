@@ -22,13 +22,24 @@ def settings(tmp_path) -> Settings:
 
 def fixture(raw_dir):
     """Charge overnight, drive 12 km to work, charge again."""
-    write(raw_dir, "snapshots", [
-        battery(at(0), 40.0), battery(at(5), 41.0, charging=True), battery(at(60), 80.0),
-        driving(at(60), 1000.0), location(at(60), *HOME),
-        battery(at(65), 79.5), driving(at(65), 1003.0, ignition_on=True),
-        battery(at(70), 78.0), driving(at(70), 1012.0), location(at(70), *WORK),
-        battery(at(300), 78.0, charging=True), battery(at(400), 90.0),
-    ])  # fmt: skip
+    write(
+        raw_dir,
+        "snapshots",
+        [
+            battery(at(0), 40.0),
+            battery(at(5), 41.0, charging=True),
+            battery(at(60), 80.0),
+            driving(at(60), 1000.0),
+            location(at(60), *HOME),
+            battery(at(65), 79.5),
+            driving(at(65), 1003.0, ignition_on=True),
+            battery(at(70), 78.0),
+            driving(at(70), 1012.0),
+            location(at(70), *WORK),
+            battery(at(300), 78.0, charging=True),
+            battery(at(400), 90.0),
+        ],
+    )
 
 
 def counts(db_path):
@@ -109,3 +120,35 @@ def test_build_gives_up_with_a_clear_error(tmp_path, monkeypatch):
     s = settings(tmp_path)
     with pytest.raises(RuntimeError, match="in use"):
         build_database(s)
+
+
+def test_latest_forecast_becomes_an_hourly_table_without_location(tmp_path):
+    from kiatracker.raw import append_record
+
+    s = settings(tmp_path)
+    fixture(s.raw_dir)
+    for n, temp in enumerate((1.0, 5.0)):  # two fetches: only the latest counts
+        hourly = {
+            "time": ["2026-11-03T00:00", "2026-11-03T01:00"],
+            "temperature_2m": [temp, temp],
+            "wind_speed_10m": [10.0, 12.0],
+            "wind_direction_10m": [200.0, 210.0],
+        }
+        record = {
+            "fetched_at": at(n).isoformat(),
+            "endpoint": "open-meteo-forecast",
+            "key": {"lat": 47.6, "lon": 19.2},
+            "http_status": 200,
+            "body": {"hourly": hourly},
+        }
+        append_record(s.raw_dir, "forecast", record, at(n))
+    assert build_database(s)["forecast_hourly"] == 2
+    with duckdb.connect(str(s.db_path), read_only=True) as con:
+        columns = [
+            c
+            for (c,) in con.execute(
+                "select column_name from information_schema.columns where table_name = 'forecast_hourly'"
+            ).fetchall()
+        ]
+        temps = {t for (t,) in con.execute("select temp_c from forecast_hourly").fetchall()}
+    assert columns == ["ts", "temp_c", "wind_kph", "wind_dir_deg"] and temps == {5.0}

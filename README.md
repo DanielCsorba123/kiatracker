@@ -2,7 +2,7 @@
 
 A personal data platform for a Kia EV3: it collects the car's own data through the official EU Data Act API, models every drive and charge, and joins them with weather. The goal is to answer how much range wind, cold and route really cost, and later to forecast it.
 
-> Status: data foundation and dashboard done. Next: a weather-aware range model, then a route-aware one.
+> Status: data foundation, dashboard and weather-aware range model done. Next: route-aware range (elevation and wind along a planned route).
 
 ![Dashboard overview (demo data)](docs/images/overview.png)
 
@@ -23,6 +23,7 @@ Open-Meteo ─weather─────────────────▶ data
                                             │
                                             ▼
                      dashboard (Streamlit): queries.py → charts.py → pages
+                     forecast: features → physics-informed model → backtest → range outlook
 ```
 
 - **Raw files are the source of truth.** Every API response is stored as received; the database is rebuilt from them in seconds, so parsing fixes apply to all history.
@@ -48,7 +49,29 @@ This opens the dashboard at http://127.0.0.1:8501 on 60 days of simulated drivin
 | ![Costs: savings against a petrol car](docs/images/costs.png) | |
 | **Costs:** what the electricity cost against the same distance in a petrol car, at prices you enter. | |
 
-How it is built:
+## Range model
+
+![Range: forecast for the next days, what-if sliders, backtest](docs/images/range.png)
+
+How far will the current charge really go in tomorrow's weather? The model is a **physics-informed regression**, not a black box, because a personal car produces tens of drives, not millions:
+
+```
+kWh/100 km = c0 + c_aero · (v + headwind)² + c_heat · max(0, 18 °C − T) / v
+```
+
+- **Air resistance** grows with the square of airspeed. Headwind is the hour's wind projected onto the direction of travel, taken from the car's GPS points along each drive. Without a known route, wind averages out to v² + w²/2: on a round trip it always costs range.
+- **Heating** draws roughly constant power, so its energy per km scales with time per km. Slow, cold trips cost the most.
+- **Fitting:** distance-weighted least squares. A coefficient that comes out negative (cold "saving" energy) is dropped and the rest refitted. It needs 15 drives to start.
+- **Honest evaluation:** a time-ordered backtest that only ever trains on earlier drives, against two baselines. The 10th-90th percentile of the out-of-sample errors becomes the range interval.
+- **Validated on known truth:** the simulator drives with known coefficients, and a test checks the fit recovers them within 15 %. On 60 demo days the backtest error is 1.1 kWh/100 km, against 1.8 for a temperature-only line and 2.1 for the mean.
+
+```bash
+uv run kiatracker train      # fit, backtest, explain
+uv run kiatracker forecast   # fetch the 3-day forecast and print the range per day
+```
+
+## How the dashboard is built
+
 - `queries.py` turns DuckDB into pandas frames and `charts.py` turns frames into Altair charts; neither imports Streamlit, so both are unit-tested. Pages are thin `render(con, period)` functions, smoke-tested headlessly with Streamlit's `AppTest`.
 - **Privacy by construction, failing closed.** Queries return `home` / `other` zones, never coordinates or the VIN (a test enforces it). The app shows simulated data unless it was started by `kiatracker dashboard`, which opts in to personal data, binds to `127.0.0.1` and turns off Streamlit's usage statistics and error details; personal mode refuses to run on any other address, and `KIATRACKER_DEMO` always forces the demo. Every screenshot here is demo data.
 

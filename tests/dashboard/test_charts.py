@@ -68,3 +68,22 @@ def test_histogram_axis_shows_whole_percent():
 def test_histogram_can_fix_its_range():
     x = encodings(charts.histogram(DF, "km", "t", step=10, extent=(0, 100)))["x"]
     assert x["bin"]["extent"] == [0, 100] and x["scale"]["domain"] == [0, 100]
+
+
+def test_bar_with_interval_layers_whiskers_and_tooltip():
+    df = pd.DataFrame(
+        {"day": ["Mon", "Tue"], "km": [300.0, 280.0], "lo": [270.0, 250.0], "hi": [330.0, 310.0]}
+    )
+    spec = charts.bar_with_interval(df, "day:O", "km", "lo", "hi", "Range by day", "km").to_dict()
+    assert len(spec["layer"]) == 2
+    assert spec["layer"][1]["mark"]["type"] == "rule"
+    assert "tooltip" in spec["layer"][0]["encoding"]
+
+
+def test_predicted_vs_actual_has_equal_axes_and_a_diagonal():
+    df = pd.DataFrame({"predicted": [12.0, 18.0, 22.5], "actual": [10.0, 19.0, 21.0]})
+    spec = charts.predicted_vs_actual(df, "kWh/100 km").to_dict()
+    points, diagonal = spec["layer"]
+    x, y = points["encoding"]["x"], points["encoding"]["y"]
+    assert x["scale"]["domain"] == y["scale"]["domain"] == [10.0, 22.5]
+    assert diagonal["mark"]["type"] == "line" and diagonal["mark"]["strokeDash"]

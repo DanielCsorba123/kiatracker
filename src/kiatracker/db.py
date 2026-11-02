@@ -9,6 +9,7 @@ import os
 import time
 import types
 import typing
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -16,6 +17,7 @@ from zoneinfo import ZoneInfo
 import duckdb
 
 from kiatracker.config import Settings
+from kiatracker.forecast.outlook import latest_forecast
 from kiatracker.gold import (
     ChargeWindow,
     ChargingSession,
@@ -42,6 +44,33 @@ REPLACE_TRIES = 20
 REPLACE_WAIT_S = 0.5  # on Windows a reader (e.g. the dashboard) blocks replacing the file for a moment
 LOCAL_TZ = ZoneInfo("Europe/Budapest")
 SQL_TYPES = {datetime: "TIMESTAMP", float: "DOUBLE", int: "BIGINT", bool: "BOOLEAN", str: "VARCHAR"}
+
+
+@dataclass(frozen=True)
+class ForecastHour:
+    ts: datetime
+    temp_c: float | None
+    wind_kph: float | None
+    wind_dir_deg: float | None
+
+
+def forecast_hours(raw_dir: Path) -> list[ForecastHour]:
+    """The latest fetched forecast as rows; the grid cell it was fetched for is deliberately left out."""
+    hourly = latest_forecast(raw_dir) or {}
+
+    def column(name: str) -> list:
+        return hourly.get(name) or [None] * len(hourly.get("time") or [])
+
+    return [
+        ForecastHour(datetime.fromisoformat(t).replace(tzinfo=UTC), temp, wind, direction)
+        for t, temp, wind, direction in zip(
+            hourly.get("time") or [],
+            column("temperature_2m"),
+            column("wind_speed_10m"),
+            column("wind_direction_10m"),
+            strict=True,
+        )
+    ]
 
 
 def sql_type(annotation) -> str:
@@ -103,6 +132,7 @@ def build_database(settings: Settings) -> dict[str, int]:
         ("charging_sessions", ChargingSession, sessions),
         ("charge_windows", ChargeWindow, windows),
         ("drive_weather", DriveWeather, drive_weather),
+        ("forecast_hourly", ForecastHour, forecast_hours(settings.raw_dir)),
     ]
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     tmp = settings.db_path.with_suffix(".building")

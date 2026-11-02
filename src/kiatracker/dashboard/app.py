@@ -8,6 +8,7 @@ import streamlit as st
 
 from kiatracker.config import load_settings
 from kiatracker.dashboard.pages import charging, costs, drives, overview
+from kiatracker.dashboard.pages import range as range_page
 from kiatracker.dashboard.queries import Period, connect
 from kiatracker.dashboard.source import build_demo_database, is_local_only, resolve_source
 
@@ -16,6 +17,7 @@ PAGES = [
     (drives, "Drives", ":material/directions_car:"),
     (charging, "Charging", ":material/ev_station:"),
     (costs, "Costs", ":material/savings:"),
+    (range_page, "Range", ":material/route:"),
 ]
 
 

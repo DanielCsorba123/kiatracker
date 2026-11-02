@@ -4,7 +4,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 APP = str(Path(__file__).parents[2] / "src" / "kiatracker" / "dashboard" / "app.py")
-PAGES = ["overview", "drives", "charging", "costs"]
+PAGES = ["overview", "drives", "charging", "costs", "range"]
 
 
 def render_page(page: str, db: str):
@@ -78,3 +78,11 @@ def test_page_renders_empty_database(page, empty_db_path):
     at = run_page(page, empty_db_path)
     assert not at.exception
     assert at.info, "an empty-state message is shown"
+
+
+def test_range_page_with_too_few_drives_says_how_many_more(tmp_path):
+    from kiatracker.dashboard.source import build_demo_database
+
+    at = run_page("range", build_demo_database(tmp_path, days=3))
+    assert not at.exception
+    assert any("more drives" in info.value for info in at.info)
