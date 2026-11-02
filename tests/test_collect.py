@@ -1,6 +1,8 @@
 import json
 from datetime import UTC, datetime, timedelta
 
+import httpx
+
 from kiatracker.collect import STATE_FILE, poll
 from kiatracker.pleos import SNAPSHOT_PATHS, TRIPS_PATH, RateLimited
 from kiatracker.raw import read_records
@@ -107,3 +109,19 @@ def test_summary_never_contains_coordinates(tmp_path):
     result = poll(moved, "VIN1", tmp_path, now=NOW + timedelta(minutes=5))
     assert "SOC 70.0%" in result.summary
     assert LAT not in result.summary and "47.12" not in result.summary
+
+
+class FlakyClient(FakeClient):
+    def get(self, path, params=None):
+        if path.endswith("/batteries"):
+            raise httpx.ConnectError("network unreachable")
+        return super().get(path, params)
+
+
+def test_network_error_on_one_group_is_logged_and_poll_continues(tmp_path):
+    result = poll(FlakyClient(), "VIN1", tmp_path, now=NOW)
+    assert len(records(tmp_path, "snapshots")) == 4
+    error = records(tmp_path, "errors")[0]
+    assert error["endpoint"] == "batteries" and error["exception"] == "ConnectError"
+    assert result.errors == ["batteries"]
+    assert (tmp_path / STATE_FILE).exists()

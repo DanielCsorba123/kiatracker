@@ -224,7 +224,7 @@ def derive_charge_windows(
     finished = [s for s in sessions if not s.in_progress]
     windows = []
     for before, after in zip(finished, finished[1:], strict=False):
-        inside = [d for d in drives if not d.in_progress and before.end_ts <= d.start_ts < after.start_ts]
+        inside = [d for d in drives if not d.in_progress and before.end_ts < d.end_ts <= after.start_ts]
         distance = sum(d.distance_km or 0 for d in inside)
         soc_used = diff(before.soc_end, after.soc_start)
         energy = kwh(soc_used, capacity_kwh)

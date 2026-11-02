@@ -20,3 +20,19 @@ def test_collect_without_credentials_fails_clearly(tmp_path, capsys, monkeypatch
 def test_stats_before_build(tmp_path, capsys):
     assert main(["--data-dir", str(tmp_path), "stats"]) == 0
     assert "kiatracker build" in capsys.readouterr().out
+
+
+def test_collect_network_failure_is_reported_not_raised(tmp_path, capsys, monkeypatch):
+    import httpx
+
+    from kiatracker import cli
+
+    monkeypatch.setenv("PLEOS_API_KEY_CLIENT_ID", "id")
+    monkeypatch.setenv("PLEOS_API_KEY_CLIENT_SECRET", "secret")
+
+    def offline(self):
+        raise httpx.ConnectError("no network")
+
+    monkeypatch.setattr(cli.PleosClient, "vehicles", offline)
+    assert main(["--data-dir", str(tmp_path), "collect"]) == 1
+    assert "collect failed" in capsys.readouterr().out

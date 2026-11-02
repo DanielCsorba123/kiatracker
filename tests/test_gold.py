@@ -166,3 +166,23 @@ def test_window_ignores_drive_in_progress():
     )
     [w] = derive_charge_windows(derive_charging_sessions(r, CAP, None, 0.3), drives_of(r), CAP)
     assert w.drives == 0 and w.distance_km == 0 and w.kwh_per_100km is None
+
+
+def test_drive_starting_before_unplug_reading_counts_in_window():
+    # charging ends; the first non-charging reading is the ignition-on poll at 65, but the API trip says
+    # the drive began at 62, before that reading
+    r = Readings(
+        battery=[
+            bat(0, 50.0),
+            bat(5, 51.0, True),
+            bat(65, 90.0),
+            bat(75, 87.0),
+            bat(600, 80.0),
+            bat(605, 81.0, True),
+            bat(700, 95.0),
+        ],
+        driving=[drv(0, 2000.0, False), drv(65, 2004.0, True), drv(75, 2020.0, False)],
+        api_trips=[ApiTrip(at(62), at(74))],
+    )
+    [w] = derive_charge_windows(derive_charging_sessions(r, CAP, None, 0.3), drives_of(r), CAP)
+    assert (w.drives, w.distance_km) == (1, 20.0)

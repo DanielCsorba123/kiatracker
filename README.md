@@ -46,7 +46,7 @@ uv run kiatracker weather   # fetch weather for new drives, then rebuild
 uv run kiatracker stats
 ```
 
-On Windows, Task Scheduler runs `.venv\Scripts\pythonw.exe -m kiatracker collect` (output goes to `data/logs/`). On a Raspberry Pi, build the Docker image and use the systemd timer in [deploy/](deploy/).
+On Windows, Task Scheduler runs `.venv\Scripts\pythonw.exe -m kiatracker collect` with **Start in** set to the project folder, since `.env` and `data/` are found relative to it (output goes to `data/logs/`). On a Raspberry Pi, build the Docker image and use the systemd timer in [deploy/](deploy/).
 
 ## Development
 

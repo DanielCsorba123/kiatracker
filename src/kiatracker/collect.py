@@ -9,13 +9,19 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from kiatracker.pleos import SNAPSHOT_PATHS, TRIPS_PATH, PleosClient, RateLimited
+import httpx
+
+from kiatracker.pleos import SNAPSHOT_PATHS, TRIPS_PATH, PleosClient, PleosError, RateLimited
 from kiatracker.privacy import haversine_km
 from kiatracker.raw import append_record, compact_isla
 
 STATE_FILE = "logger_state.json"  # same file and keys as the spike logger, so it carries over
 TRIP_SYNC_EVERY = timedelta(hours=6)
 TRIP_ZONE = "Europe/Budapest"
+
+
+class _SkipTrips(Exception):
+    """The trip sync failed; already logged, try again next poll."""
 
 
 @dataclass
@@ -44,9 +50,25 @@ def poll(client: PleosClient, vin: str, raw_dir: Path, now: datetime | None = No
     result = PollResult()
     fetched_at = now.isoformat()
     data: dict[str, dict] = {}
+
+    def fetch(name: str, path: str, params: dict | None = None) -> tuple[int, dict] | None:
+        """GET one endpoint; a network or login failure is logged and skipped, not fatal."""
+        try:
+            return client.get(path, params)
+        except RateLimited:
+            raise
+        except (httpx.HTTPError, PleosError) as err:
+            record = {"fetched_at": fetched_at, "endpoint": name, "exception": type(err).__name__}
+            append_record(raw_dir, "errors", record, now)
+            result.errors.append(name)
+            return None
+
     try:
         for group, path in SNAPSHOT_PATHS.items():
-            status, payload = client.get(path.format(vin=vin))
+            response = fetch(group, path.format(vin=vin))
+            if response is None:
+                continue
+            status, payload = response
             body = payload.get("data")
             if status != 200 or not isinstance(body, dict):
                 append_record(
@@ -76,7 +98,10 @@ def poll(client: PleosClient, vin: str, raw_dir: Path, now: datetime | None = No
                 "endDate": f"{today:%Y%m%d}",
                 "zoneId": TRIP_ZONE,
             }
-            status, payload = client.get(TRIPS_PATH.format(vin=vin), query)
+            response = fetch("trips", TRIPS_PATH.format(vin=vin), query)
+            if response is None:
+                raise _SkipTrips
+            status, payload = response
             append_record(
                 raw_dir,
                 "trips",
@@ -99,6 +124,8 @@ def poll(client: PleosClient, vin: str, raw_dir: Path, now: datetime | None = No
             now,
         )
         result.errors.append("rate limited")
+    except _SkipTrips:
+        pass
 
     result.summary = summarize(data, state, "locations" in result.new, result, now)
     save_state(raw_dir, state)

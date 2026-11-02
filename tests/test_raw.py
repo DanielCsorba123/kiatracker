@@ -44,3 +44,11 @@ def test_compact_isla_keeps_shape_not_repeats():
 
 def test_compact_isla_ignores_error_payload():
     assert compact_isla({"error": {"code": "4045"}}) == {"error": {"code": "4045"}}
+
+
+def test_record_after_truncated_line_is_kept(tmp_path):
+    path = append_record(tmp_path, "snapshots", {"n": 1}, now=NOV)
+    with path.open("a", encoding="utf-8") as f:
+        f.write('{"n": 2, "bo')  # power cut mid-write
+    append_record(tmp_path, "snapshots", {"n": 3}, now=NOV)
+    assert [r["n"] for r in read_records(tmp_path, "snapshots")] == [1, 3]

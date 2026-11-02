@@ -44,6 +44,9 @@ def cmd_collect(settings: Settings, args) -> int:
     except PleosError as err:
         print(f"{datetime.now():%m-%d %H:%M}  collect failed: {err} ({err.status} {err.code})", flush=True)
         return 1
+    except httpx.HTTPError as err:  # e.g. the PC just woke up and has no network yet
+        print(f"{datetime.now():%m-%d %H:%M}  collect failed: {type(err).__name__}", flush=True)
+        return 1
     print(f"{datetime.now():%m-%d %H:%M}  {result.summary}", flush=True)
     return 0
 

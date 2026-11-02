@@ -12,9 +12,17 @@ from pathlib import Path
 def append_record(raw_dir: Path, kind: str, record: dict, now: datetime) -> Path:
     raw_dir.mkdir(parents=True, exist_ok=True)
     path = raw_dir / f"{kind}-{now:%Y-%m}.jsonl"
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record) + "\n")
+    with path.open("ab") as f:
+        if f.tell() and not ends_with_newline(path):
+            f.write(b"\n")  # the previous write was cut short; start this record on a fresh line
+        f.write((json.dumps(record) + "\n").encode("utf-8"))
     return path
+
+
+def ends_with_newline(path: Path) -> bool:
+    with path.open("rb") as f:
+        f.seek(-1, 2)
+        return f.read(1) == b"\n"
 
 
 def read_records(raw_dir: Path, kind: str) -> Iterator[dict]:
