@@ -58,7 +58,9 @@ def test_no_forecast_no_outlook(tmp_path):
 @respx.mock
 def test_fetch_forecast_stores_a_raw_record(tmp_path):
     route = respx.get(FORECAST_URL).mock(return_value=httpx.Response(200, json={"hourly": hourly()}))
-    fetch_forecast((47.5, 19.1), tmp_path, httpx.Client(), now=datetime(2026, 11, 3, tzinfo=UTC))
+    assert (
+        fetch_forecast((47.5, 19.1), tmp_path, httpx.Client(), now=datetime(2026, 11, 3, tzinfo=UTC)) == 200
+    )
     params = route.calls.last.request.url.params
     assert (params["latitude"], params["longitude"], params["forecast_days"]) == ("47.5", "19.1", "3")
     [record] = read_records(tmp_path, "forecast")

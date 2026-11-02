@@ -75,6 +75,38 @@ def cmd_weather(settings: Settings, args) -> int:
     return cmd_build(settings, args)
 
 
+def cmd_refresh(settings: Settings, args) -> int:
+    """Everything after collecting, for a scheduler: weather, forecast, rebuild, retrain.
+
+    Each step is best-effort, so a network outage never stops the database from being rebuilt.
+    """
+    r, drives, _, _ = derive_all(settings)
+    cell = settings.home or next(((p.lat, p.lon) for p in reversed(r.location) if p.lat is not None), None)
+    with httpx.Client() as http:
+        try:
+            fetched = fetch_weather(drives, settings.raw_dir, http, date.today())
+            print(f"Weather fetched for {fetched} place-days")
+        except httpx.HTTPError as err:
+            print(f"Weather skipped: {type(err).__name__}")
+        if cell:
+            try:
+                status = fetch_forecast(cell, settings.raw_dir, http, datetime.now(UTC))
+                print("Forecast fetched" if status == 200 else f"Forecast not available (HTTP {status})")
+            except httpx.HTTPError as err:
+                print(f"Forecast skipped: {type(err).__name__}")
+    counts = build_database(settings)
+    print(f"Rebuilt: {counts['drives']} drives, {counts['charging_sessions']} charging sessions")
+    with duckdb.connect(str(settings.db_path), read_only=True) as con:
+        try:
+            trained = train(con)
+        except NotEnoughData as err:
+            print(f"Range model not trained: {err}")
+            return 0
+    trained.model.save(settings.data_dir / MODEL_FILE)
+    print(f"Range model trained on {trained.model.n_drives} drives")
+    return 0
+
+
 def cmd_demo(settings: Settings, args) -> int:
     demo = dataclasses.replace(settings, data_dir=settings.data_dir / "demo", home=FAKE_HOME)
     shutil.rmtree(demo.data_dir, ignore_errors=True)
@@ -197,6 +229,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("collect", help="poll the car once and store new readings")
     sub.add_parser("build", help="rebuild the database from raw files")
     sub.add_parser("weather", help="fetch missing weather for drives, then rebuild")
+    sub.add_parser("refresh", help="weather, forecast, rebuild and retrain in one go (schedule hourly)")
     demo = sub.add_parser("demo", help="generate fake data into <data-dir>/demo and build it")
     demo.add_argument("--days", type=int, default=30)
     sub.add_parser("stats", help="print a summary without coordinates")
@@ -229,5 +262,6 @@ def main(argv: list[str] | None = None) -> int:
         "dashboard": cmd_dashboard,
         "train": cmd_train,
         "forecast": cmd_forecast,
+        "refresh": cmd_refresh,
     }
     return commands[args.command](settings, args)

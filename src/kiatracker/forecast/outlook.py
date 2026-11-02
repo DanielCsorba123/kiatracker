@@ -36,8 +36,8 @@ def range_interval(model: RangeModel, soc, capacity_kwh, speed_kph, temp_c, wind
     return range_km(soc, capacity_kwh, hi), range_km(soc, capacity_kwh, mid), range_km(soc, capacity_kwh, lo)
 
 
-def fetch_forecast(cell: tuple[float, float], raw_dir: Path, http: httpx.Client, now: datetime) -> None:
-    """Fetch three days of hourly forecast for a ~10 km grid cell and keep it as a raw record."""
+def fetch_forecast(cell: tuple[float, float], raw_dir: Path, http: httpx.Client, now: datetime) -> int:
+    """Fetch 3 days of hourly forecast for a ~10 km cell, store it as a raw record, return the status."""
     lat, lon = round(cell[0], 1), round(cell[1], 1)
     params = {
         "latitude": lat,
@@ -60,6 +60,7 @@ def fetch_forecast(cell: tuple[float, float], raw_dir: Path, http: httpx.Client,
         "body": body,
     }
     append_record(raw_dir, "forecast", record, now)
+    return response.status_code
 
 
 def latest_forecast(raw_dir: Path) -> dict | None:

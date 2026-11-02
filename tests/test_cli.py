@@ -84,3 +84,31 @@ def test_dashboard_address_can_be_set_for_containers():
     assert argv[argv.index("--server.address") + 1] == "0.0.0.0"
     default, _ = dashboard_command(demo=False, environ={})
     assert default[default.index("--server.address") + 1] == "127.0.0.1"
+
+
+def test_refresh_rebuilds_and_retrains_even_when_offline(tmp_path, capsys, monkeypatch):
+    import httpx
+
+    from kiatracker import cli
+
+    def offline(*args, **kwargs):
+        raise httpx.ConnectError("no network")
+
+    monkeypatch.setattr(cli, "fetch_weather", offline)
+    monkeypatch.setattr(cli, "fetch_forecast", offline)
+    assert main(["--data-dir", str(tmp_path), "demo", "--days", "30"]) == 0
+    demo = tmp_path / "demo"
+    (demo / "kiatracker.duckdb").unlink()
+    assert main(["--data-dir", str(demo), "refresh"]) == 0
+    out = capsys.readouterr().out
+    assert "no network" not in out and "ConnectError" in out
+    assert (demo / "kiatracker.duckdb").exists() and (demo / "models" / "range.json").exists()
+
+
+def test_refresh_with_too_little_data_still_succeeds(tmp_path, capsys, monkeypatch):
+    from kiatracker import cli
+
+    monkeypatch.setattr(cli, "fetch_weather", lambda *a, **k: 0)
+    monkeypatch.setattr(cli, "fetch_forecast", lambda *a, **k: None)
+    assert main(["--data-dir", str(tmp_path), "refresh"]) == 0
+    assert "need 15 more drives" in capsys.readouterr().out
