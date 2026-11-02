@@ -49,30 +49,55 @@ def poll(client: PleosClient, vin: str, raw_dir: Path, now: datetime | None = No
             status, payload = client.get(path.format(vin=vin))
             body = payload.get("data")
             if status != 200 or not isinstance(body, dict):
-                append_record(raw_dir, "errors", {"fetched_at": fetched_at, "endpoint": group,
-                                                  "http_status": status, "body": payload}, now)
+                append_record(
+                    raw_dir,
+                    "errors",
+                    {"fetched_at": fetched_at, "endpoint": group, "http_status": status, "body": payload},
+                    now,
+                )
                 result.errors.append(group)
                 continue
             data[group] = body
             if body.get("timestamp") != state["last_timestamp"].get(group):
                 state["last_timestamp"][group] = body.get("timestamp")
-                append_record(raw_dir, "snapshots", {"fetched_at": fetched_at, "endpoint": group,
-                                                     "http_status": status, "body": payload}, now)
+                append_record(
+                    raw_dir,
+                    "snapshots",
+                    {"fetched_at": fetched_at, "endpoint": group, "http_status": status, "body": payload},
+                    now,
+                )
                 result.new.append(group)
 
         last_sync = state["last_trip_sync"]
         if not last_sync or now - datetime.fromisoformat(last_sync) > TRIP_SYNC_EVERY:
             today = now.astimezone(ZoneInfo(TRIP_ZONE)).date()
-            query = {"startDate": f"{today - timedelta(days=6):%Y%m%d}", "endDate": f"{today:%Y%m%d}",
-                     "zoneId": TRIP_ZONE}
+            query = {
+                "startDate": f"{today - timedelta(days=6):%Y%m%d}",
+                "endDate": f"{today:%Y%m%d}",
+                "zoneId": TRIP_ZONE,
+            }
             status, payload = client.get(TRIPS_PATH.format(vin=vin), query)
-            append_record(raw_dir, "trips", {"fetched_at": fetched_at, "query": query, "http_status": status,
-                                             "body": compact_isla(payload), "isla_compacted": True}, now)
+            append_record(
+                raw_dir,
+                "trips",
+                {
+                    "fetched_at": fetched_at,
+                    "query": query,
+                    "http_status": status,
+                    "body": compact_isla(payload),
+                    "isla_compacted": True,
+                },
+                now,
+            )
             state["last_trip_sync"] = fetched_at
             result.new.append("trips")
     except RateLimited:
-        append_record(raw_dir, "errors", {"fetched_at": fetched_at, "endpoint": "any", "http_status": 429,
-                                          "body": None}, now)
+        append_record(
+            raw_dir,
+            "errors",
+            {"fetched_at": fetched_at, "endpoint": "any", "http_status": 429, "body": None},
+            now,
+        )
         result.errors.append("rate limited")
 
     result.summary = summarize(data, state, "locations" in result.new, result, now)
@@ -88,8 +113,10 @@ def summarize(data: dict, state: dict, new_location: bool, result: PollResult, n
         parts.append(f"SOC {charge.get('stateOfCharge')}% {charge.get('status')}")
     driving = data.get("driving") or {}
     if driving:
-        parts.append(f"odo {(driving.get('odometer') or {}).get('value')}, "
-                     f"ignition {(driving.get('ignition') or {}).get('status')}")
+        parts.append(
+            f"odo {(driving.get('odometer') or {}).get('value')}, "
+            f"ignition {(driving.get('ignition') or {}).get('status')}"
+        )
     location = data.get("locations") or {}
     loc = location.get("location") or {}
     if location.get("timestamp"):

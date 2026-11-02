@@ -30,8 +30,13 @@ def test_read_missing_dir_yields_nothing(tmp_path):
 
 
 def test_compact_isla_keeps_shape_not_repeats():
-    payload = {"data": {"trips": [{"triggerStartTime": "t", "tripLength": 5,
-                                   "isla": {"optionUsm": ["warning"] * 4 + [None]}}]}}
+    payload = {
+        "data": {
+            "trips": [
+                {"triggerStartTime": "t", "tripLength": 5, "isla": {"optionUsm": ["warning"] * 4 + [None]}}
+            ]
+        }
+    }
     trip = compact_isla(payload)["data"]["trips"][0]
     assert trip["isla"] == {"optionUsm": {"len": 5, "distinct": ["None", "warning"]}}
     assert trip["tripLength"] == 5

@@ -43,8 +43,9 @@ def parse_body(response: httpx.Response) -> dict:
 
 
 class PleosClient:
-    def __init__(self, client_id: str, client_secret: str, brand: str = "kia",
-                 http: httpx.Client | None = None):
+    def __init__(
+        self, client_id: str, client_secret: str, brand: str = "kia", http: httpx.Client | None = None
+    ):
         self.credentials = {"clientId": client_id, "clientSecret": client_secret}
         self.http = http or httpx.Client(base_url=BASE_URL, timeout=30)
         self.http.headers["Brand"] = brand

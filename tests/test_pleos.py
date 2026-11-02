@@ -26,10 +26,12 @@ def test_login_sends_credentials_and_brand():
 @respx.mock
 def test_get_relogs_in_once_on_expired_token():
     respx.post(TOKEN_URL).mock(side_effect=[token("old"), token("new")])
-    respx.get(BATTERY_URL).mock(side_effect=[
-        httpx.Response(400, json={"error": {"code": "40003", "message": "Token expired"}}),
-        httpx.Response(200, json={"data": {"charge": {}}}),
-    ])
+    respx.get(BATTERY_URL).mock(
+        side_effect=[
+            httpx.Response(400, json={"error": {"code": "40003", "message": "Token expired"}}),
+            httpx.Response(200, json={"data": {"charge": {}}}),
+        ]
+    )
     status, payload = PleosClient("id", "secret").get("/v1/vehicles/VIN1/batteries")
     assert status == 200
     assert respx.calls[-1].request.headers["Authorization"] == "Bearer new"
@@ -65,5 +67,6 @@ def test_non_json_body_is_wrapped():
 def test_vehicles_returns_list():
     respx.post(TOKEN_URL).mock(return_value=token("t"))
     respx.get(f"{BASE_URL}/v1/vehicles/consent").mock(
-        return_value=httpx.Response(200, json={"data": {"vehicles": [{"vin": "VIN1", "sellname": "EV3"}]}}))
+        return_value=httpx.Response(200, json={"data": {"vehicles": [{"vin": "VIN1", "sellname": "EV3"}]}})
+    )
     assert PleosClient("id", "secret").vehicles() == [{"vin": "VIN1", "sellname": "EV3"}]
