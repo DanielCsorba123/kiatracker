@@ -29,6 +29,7 @@ from kiatracker.model import (
     DrivingReading,
     LocationReading,
     RangeReading,
+    Readings,
     StatusReading,
 )
 from kiatracker.silver import load_readings
@@ -64,13 +65,17 @@ def write_table(con: duckdb.DuckDBPyConnection, name: str, cls: type, rows: list
     return len(rows)
 
 
-def build_database(settings: Settings) -> dict[str, int]:
+def derive_all(settings: Settings) -> tuple[Readings, list[Drive], list[ChargingSession], list[ChargeWindow]]:
     r = load_readings(settings.raw_dir)
     capacities = [b.capacity_kwh for b in r.battery if b.capacity_kwh]
     capacity = capacities[-1] if capacities else DEFAULT_CAPACITY_KWH
     drives = derive_drives(r, capacity, settings.home, settings.home_radius_km)
     sessions = derive_charging_sessions(r, capacity, settings.home, settings.home_radius_km)
-    windows = derive_charge_windows(sessions, drives, capacity)
+    return r, drives, sessions, derive_charge_windows(sessions, drives, capacity)
+
+
+def build_database(settings: Settings) -> dict[str, int]:
+    r, drives, sessions, windows = derive_all(settings)
     weather = load_weather(settings.raw_dir)
     drive_weather = [w for d in drives if (w := weather_for_drive(d, weather))]
 

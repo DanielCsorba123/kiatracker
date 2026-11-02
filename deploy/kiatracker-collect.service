@@ -1,0 +1,14 @@
+# Raspberry Pi: one poll of the car. Triggered by kiatracker-collect.timer.
+# Install: copy both files to /etc/systemd/system/, then
+#   sudo systemctl enable --now kiatracker-collect.timer
+[Unit]
+Description=Poll the Kia EV3 once
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/kiatracker
+EnvironmentFile=/opt/kiatracker/.env
+ExecStart=/usr/bin/docker run --rm --env-file /opt/kiatracker/.env -v /opt/kiatracker/data:/data kiatracker collect
+TimeoutStartSec=4min
