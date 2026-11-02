@@ -68,3 +68,15 @@ def test_demo_charging_habits_vary(tmp_path):
         starts = [s for (s,) in con.execute("select soc_start from charging_sessions").fetchall()]
     assert len(ends) >= 2  # owners don't always charge to the same limit
     assert max(starts) - min(starts) > 15
+
+
+def test_demo_writes_forecast_and_varying_wind_direction(tmp_path):
+    from kiatracker.raw import read_records
+
+    generate(tmp_path, START, days=10, seed=2)
+    forecasts = list(read_records(tmp_path, "forecast"))
+    assert len(forecasts) == 1
+    hours = forecasts[0]["body"]["hourly"]["time"]
+    assert len(hours) == 72 and hours[0] == "2026-01-15T00:00"  # the 3 days after the simulated ones
+    directions = {r["body"]["hourly"]["wind_direction_10m"][0] for r in read_records(tmp_path, "weather")}
+    assert len(directions) > 3
