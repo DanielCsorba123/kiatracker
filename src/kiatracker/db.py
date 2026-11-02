@@ -1,0 +1,142 @@
+"""Rebuild the DuckDB database from raw files, and summarise it.
+
+Every build starts from scratch: raw files are the source of truth, so there is no incremental state to
+corrupt. Timestamps are stored as naive UTC (`TIMESTAMP`); columns ending in `_ts` are UTC.
+"""
+
+import dataclasses
+import os
+import types
+import typing
+from datetime import UTC, datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import duckdb
+
+from kiatracker.config import Settings
+from kiatracker.gold import (
+    ChargeWindow,
+    ChargingSession,
+    Drive,
+    derive_charge_windows,
+    derive_charging_sessions,
+    derive_drives,
+)
+from kiatracker.model import (
+    ApiTrip,
+    BatteryReading,
+    DrivingReading,
+    LocationReading,
+    RangeReading,
+    StatusReading,
+)
+from kiatracker.silver import load_readings
+from kiatracker.weather import DriveWeather, load_weather, weather_for_drive
+
+DEFAULT_CAPACITY_KWH = 81.4  # EV3 Long Range, used only if no reading reports it
+LOCAL_TZ = ZoneInfo("Europe/Budapest")
+SQL_TYPES = {datetime: "TIMESTAMP", float: "DOUBLE", int: "BIGINT", bool: "BOOLEAN", str: "VARCHAR"}
+
+
+def sql_type(annotation) -> str:
+    if isinstance(annotation, types.UnionType):  # e.g. float | None
+        annotation = next(a for a in typing.get_args(annotation) if a is not type(None))
+    return SQL_TYPES[annotation]
+
+
+def to_sql(value):
+    if isinstance(value, datetime):
+        return value.astimezone(UTC).replace(tzinfo=None)
+    return value
+
+
+def write_table(con: duckdb.DuckDBPyConnection, name: str, cls: type, rows: list) -> int:
+    hints = typing.get_type_hints(cls)
+    fields = [f.name for f in dataclasses.fields(cls)]
+    con.execute(f"create table {name} ({', '.join(f'"{f}" {sql_type(hints[f])}' for f in fields)})")
+    if rows:
+        placeholders = ", ".join("?" for _ in fields)
+        con.executemany(
+            f"insert into {name} values ({placeholders})",
+            [[to_sql(getattr(row, f)) for f in fields] for row in rows],
+        )
+    return len(rows)
+
+
+def build_database(settings: Settings) -> dict[str, int]:
+    r = load_readings(settings.raw_dir)
+    capacities = [b.capacity_kwh for b in r.battery if b.capacity_kwh]
+    capacity = capacities[-1] if capacities else DEFAULT_CAPACITY_KWH
+    drives = derive_drives(r, capacity, settings.home, settings.home_radius_km)
+    sessions = derive_charging_sessions(r, capacity, settings.home, settings.home_radius_km)
+    windows = derive_charge_windows(sessions, drives, capacity)
+    weather = load_weather(settings.raw_dir)
+    drive_weather = [w for d in drives if (w := weather_for_drive(d, weather))]
+
+    tables = [
+        ("readings_battery", BatteryReading, r.battery),
+        ("readings_driving", DrivingReading, r.driving),
+        ("readings_location", LocationReading, r.location),
+        ("readings_status", StatusReading, r.status),
+        ("readings_range", RangeReading, r.range),
+        ("api_trips", ApiTrip, r.api_trips),
+        ("drives", Drive, drives),
+        ("charging_sessions", ChargingSession, sessions),
+        ("charge_windows", ChargeWindow, windows),
+        ("drive_weather", DriveWeather, drive_weather),
+    ]
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    tmp = settings.db_path.with_suffix(".building")
+    tmp.unlink(missing_ok=True)
+    with duckdb.connect(str(tmp)) as con:
+        result = {name: write_table(con, name, cls, rows) for name, cls, rows in tables}
+    os.replace(tmp, settings.db_path)
+    return result
+
+
+def local(ts: datetime) -> str:
+    return ts.replace(tzinfo=UTC).astimezone(LOCAL_TZ).strftime("%Y-%m-%d %H:%M")
+
+
+def fmt(value, spec: str = ".1f", missing: str = "-") -> str:
+    return missing if value is None else format(value, spec)
+
+
+def stats(settings: Settings) -> str:
+    """A plain-text summary with zones instead of coordinates, safe to paste anywhere."""
+    if not Path(settings.db_path).exists():
+        return "No database yet: run `kiatracker build`."
+    with duckdb.connect(str(settings.db_path), read_only=True) as con:
+        one = lambda sql: con.execute(sql).fetchone()  # noqa: E731
+        n, km, first, last = one("select count(*), sum(distance_km), min(start_ts), max(end_ts) from drives")
+        energy, km_measured = one(
+            "select sum(energy_kwh), sum(distance_km) from drives where kwh_per_100km is not null"
+        )
+        sessions, charged = one(
+            "select count(*), sum(energy_kwh) from charging_sessions where not in_progress"
+        )
+        soc, soc_ts = one("select soc, ts from readings_battery order by ts desc limit 1") or (None, None)
+        recent = con.execute(
+            """select d.start_ts, d.distance_km, d.kwh_per_100km, d.start_zone, d.end_zone,
+                      w.temp_c, w.wind_kph
+               from drives d left join drive_weather w using (drive_id)
+               order by d.start_ts desc limit 5"""
+        ).fetchall()
+
+    lines = [f"Drives: {n}, {fmt(km)} km" + (f" ({local(first)} to {local(last)})" if first else "")]
+    if km_measured:
+        lines.append(
+            f"Average consumption (drives of 5 km or more): {energy / km_measured * 100:.1f} kWh/100 km"
+        )
+    lines.append(f"Charging sessions: {sessions}, {fmt(charged)} kWh into the battery")
+    if soc_ts:
+        lines.append(f"Latest charge: {fmt(soc)}% at {local(soc_ts)}")
+    if recent:
+        lines.append("Recent drives (local time, km, kWh/100 km, from -> to, temp C, wind km/h):")
+        for start, dist, cons, z1, z2, temp, wind in recent:
+            lines.append(
+                f"  {local(start)}  {fmt(dist)} km  {fmt(cons)}  {z1 or '?'} -> {z2 or '?'}  "
+                f"{fmt(temp)}  {fmt(wind, '.0f')}"
+            )
+    return "\n".join(lines)
