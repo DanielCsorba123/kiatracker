@@ -13,7 +13,7 @@ def render_page(page: str, db: str):
 
     from kiatracker.dashboard.queries import Period, connect
 
-    module = importlib.import_module(f"kiatracker.dashboard.pages.{page}")
+    module = importlib.import_module(f"kiatracker.dashboard.views.{page}")
     with connect(db) as con:
         module.render(con, Period(date.today() - timedelta(days=400), date.today()))
 
@@ -89,8 +89,8 @@ def test_range_page_with_too_few_drives_says_how_many_more(tmp_path):
 
 
 def test_range_training_fingerprint_tracks_the_data(demo_db, empty_db_path):
-    from kiatracker.dashboard.pages.range import fingerprint
     from kiatracker.dashboard.queries import connect
+    from kiatracker.dashboard.views.range import fingerprint
 
     with connect(demo_db) as a, connect(demo_db) as b, connect(empty_db_path) as c:
         assert fingerprint(a) == fingerprint(b) != fingerprint(c)

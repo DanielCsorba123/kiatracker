@@ -7,10 +7,10 @@ from datetime import date, timedelta
 import streamlit as st
 
 from kiatracker.config import load_settings
-from kiatracker.dashboard.pages import charging, costs, drives, overview
-from kiatracker.dashboard.pages import range as range_page
 from kiatracker.dashboard.queries import Period, connect
 from kiatracker.dashboard.source import build_demo_database, may_show_personal, resolve_source
+from kiatracker.dashboard.views import charging, costs, drives, overview
+from kiatracker.dashboard.views import range as range_page
 
 PAGES = [
     (overview, "Overview", ":material/dashboard:"),
