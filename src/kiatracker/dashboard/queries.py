@@ -112,10 +112,12 @@ def drives(con, period: Period) -> pd.DataFrame:
     else:
         d["temp_c"] = d["wind_kph"] = None
     d["minutes"] = (pd.to_datetime(d["end_ts"]) - pd.to_datetime(d["start_ts"])).dt.total_seconds() / 60
+    d["speed_kph"] = (d["distance_km"] / d["minutes"] * 60).where(d["minutes"] > 0)
     columns = [
         "start_local",
         "distance_km",
         "minutes",
+        "speed_kph",
         "kwh_per_100km",
         "energy_kwh",
         "temp_c",
@@ -127,22 +129,28 @@ def drives(con, period: Period) -> pd.DataFrame:
 
 
 def consumption_by_band(con, period: Period, column: str, edges: list[float]) -> pd.DataFrame:
-    """Distance-weighted consumption per band of temperature, wind or trip length."""
+    """Distance-weighted consumption per band of temperature, wind, trip length or speed.
+
+    `lo` and `hi` are the band's numeric edges, for drawing the average across the band's width.
+    """
     d = drives(con, period)
     d = d[d["kwh_per_100km"].notna() & d[column].notna()]
     labels = [f"{a:g} to {b:g}" for a, b in zip(edges, edges[1:], strict=False)]
     labels[0], labels[-1] = f"under {edges[1]:g}", f"{edges[-2]:g}+"  # outer edges are only catch-alls
     d["band"] = pd.cut(d[column], edges, labels=labels, right=False)
     rows = []
+    edge = dict(zip(labels, zip(edges, edges[1:], strict=False), strict=True))
     for band, group in d.groupby("band", observed=True):
         rows.append(
             {
                 "band": str(band),
+                "lo": edge[str(band)][0],
+                "hi": edge[str(band)][1],
                 "kwh_per_100km": consumption(group["energy_kwh"], group["distance_km"]),
                 "drives": len(group),
             }
         )
-    return pd.DataFrame(rows, columns=["band", "kwh_per_100km", "drives"])
+    return pd.DataFrame(rows, columns=["band", "lo", "hi", "kwh_per_100km", "drives"])
 
 
 def charging_sessions(con, period: Period) -> pd.DataFrame:

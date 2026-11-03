@@ -105,3 +105,41 @@ def test_grouped_bars_keep_series_colours_fixed_and_show_a_legend():
     assert enc["color"]["scale"]["range"][:3] == [charts.BLUE, charts.ORANGE, charts.AQUA]
     assert "legend" not in enc["color"] or enc["color"]["legend"] is not None
     assert "tooltip" in enc and "xOffset" in enc
+
+
+DRIVES = pd.DataFrame(
+    {
+        "temp_c": [-2.0, 4.0, 12.0],
+        "wind_kph": [5.0, 20.0, 35.0],
+        "distance_km": [6.0, 20.0, 60.0],
+        "kwh_per_100km": [21.0, 17.0, 15.0],
+        "start_local": pd.to_datetime(["2026-11-01"] * 3),
+    }
+)
+BANDS = pd.DataFrame(
+    {
+        "band": ["under 0", "0+"],
+        "lo": [-30, 0],
+        "hi": [0, 45],
+        "kwh_per_100km": [21.0, 16.0],
+        "drives": [1, 2],
+    }
+)
+
+
+def test_points_with_band_averages_shows_every_drive_and_each_band_line():
+    spec = charts.points_with_bands(DRIVES, "temp_c", BANDS, "Consumption vs temperature", "°C").to_dict()
+    points, averages = spec["layer"]
+    assert points["mark"]["type"] == "circle" and "tooltip" in points["encoding"]
+    assert averages["mark"]["type"] == "rule"
+    assert averages["encoding"]["x"]["field"] == "x_lo" and averages["encoding"]["x2"]["field"] == "x_hi"
+    # catch-all outer edges are clipped to the data, so the line doesn't stretch the axis to -30 °C
+    clipped = spec["layer"][1]["data"]["values"] if "values" in spec["layer"][1].get("data", {}) else None
+    assert clipped is None or min(row["x_lo"] for row in clipped) >= -2.0
+
+
+def test_combined_chart_encodes_temperature_wind_and_length():
+    enc = charts.combined_scatter(DRIVES).to_dict()["encoding"]
+    assert enc["x"]["field"] == "temp_c" and enc["y"]["field"] == "kwh_per_100km"
+    assert enc["color"]["field"] == "wind_kph" and enc["size"]["field"] == "distance_km"
+    assert enc["color"]["legend"]["title"] and enc["size"]["legend"]["title"]

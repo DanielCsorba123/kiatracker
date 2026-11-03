@@ -123,3 +123,13 @@ def test_unfinished_drive_is_not_shown_or_counted(tiny):
     with tiny(unfinished=True) as con:
         assert len(q.drives(con, november)) == 2
         assert q.kpis(con, november)["drives"] == 2 and q.kpis(con, november)["distance_km"] == 100
+
+
+def test_drives_have_average_speed(demo, all_time):
+    d = q.drives(demo, all_time)
+    assert (d["speed_kph"] - d["distance_km"] / d["minutes"] * 60).abs().max() < 1e-9
+
+
+def test_bands_carry_numeric_edges_for_drawing(demo, all_time):
+    bands = q.consumption_by_band(demo, all_time, "temp_c", [-30, 0, 10, 45])
+    assert list(bands["lo"]) == [-30, 0, 10] and list(bands["hi"]) == [0, 10, 45]

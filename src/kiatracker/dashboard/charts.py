@@ -98,6 +98,79 @@ def grouped_bar(
     )
 
 
+def points_with_bands(
+    drives: pd.DataFrame,
+    x: str,
+    bands: pd.DataFrame,
+    title: str,
+    x_title: str,
+    y: str = "kwh_per_100km",
+    y_title: str = "kWh/100 km",
+) -> alt.LayerChart:
+    """Every drive as a dot, with each band's distance-weighted average drawn across the band."""
+    lo, hi = float(drives[x].min()), float(drives[x].max())
+    lines = bands.assign(x_lo=bands["lo"].clip(lower=lo), x_hi=bands["hi"].clip(upper=hi))  # catch-all edges
+    chart_title = alt.Title(title, anchor="start")  # explain dots and lines in a themed caption, not here
+    points = (
+        alt.Chart(drives, title=chart_title)
+        .mark_circle(color=BLUE, size=60, opacity=0.7)
+        .encode(
+            x=alt.X(f"{x}:Q", title=x_title, scale=alt.Scale(zero=False)),
+            y=alt.Y(f"{y}:Q", title=y_title, scale=alt.Scale(zero=False)),
+            tooltip=[
+                _tip("start_local:T"),
+                _tip("distance_km:Q", "km"),
+                _tip(f"{x}:Q", x_title),
+                _tip(f"{y}:Q", y_title),
+            ],
+        )
+    )
+    averages = (
+        alt.Chart(lines)
+        .mark_rule(color=ORANGE, strokeWidth=3)
+        .encode(
+            x=alt.X("x_lo:Q"),
+            x2="x_hi:Q",
+            y=alt.Y(f"{y}:Q"),
+            tooltip=[
+                _tip("band:N", x_title),
+                _tip(f"{y}:Q", "Average"),
+                alt.Tooltip("drives:Q", title="Drives"),
+            ],
+        )
+    )
+    return alt.layer(points, averages).properties(height=HEIGHT)
+
+
+def combined_scatter(drives: pd.DataFrame) -> alt.Chart:
+    """Temperature, wind and trip length at once: x temperature, colour wind, dot size trip length."""
+    return (
+        _base(drives, "Temperature, wind and trip length together")
+        .mark_circle(opacity=0.8)
+        .encode(
+            x=alt.X("temp_c:Q", title="Outside temperature (°C)", scale=alt.Scale(zero=False)),
+            y=alt.Y("kwh_per_100km:Q", title="kWh/100 km", scale=alt.Scale(zero=False)),
+            color=alt.Color(
+                "wind_kph:Q",
+                title="Wind (km/h)",
+                scale=alt.Scale(range=["#cde2fb", "#0d366b"]),
+                legend=alt.Legend(title="Wind (km/h)"),
+            ),
+            size=alt.Size(
+                "distance_km:Q", scale=alt.Scale(range=[30, 420]), legend=alt.Legend(title="Trip (km)")
+            ),
+            tooltip=[
+                _tip("start_local:T"),
+                _tip("temp_c:Q", "°C"),
+                _tip("wind_kph:Q", "Wind km/h"),
+                _tip("distance_km:Q", "km"),
+                _tip("kwh_per_100km:Q", "kWh/100 km"),
+            ],
+        )
+        .properties(height=360)
+    )
+
+
 def bar_with_interval(
     df: pd.DataFrame, x: str, y: str, lo: str, hi: str, title: str, y_title: str
 ) -> alt.LayerChart:
