@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from kiatracker.dashboard import charts, queries
-from kiatracker.dashboard.ui import empty, number, tiles
+from kiatracker.dashboard.ui import empty, number, page_header, tiles
 from kiatracker.prices import ELECTRICITY
 
 SERIES = ["Your EV", "Petrol car", "Diesel car"]
@@ -70,7 +70,7 @@ def own_car(monthly: pd.DataFrame) -> None:
 
 
 def render(con, period: queries.Period) -> None:
-    st.title("Costs")
+    page_header("Costs", "Your EV against petrol and diesel, at real Hungarian and Austrian pump prices.")
     week = queries.latest_fuel_week(con)
     if week is None:
         empty("No fuel prices yet: `kiatracker refresh` fetches them from the EU Weekly Oil Bulletin.")

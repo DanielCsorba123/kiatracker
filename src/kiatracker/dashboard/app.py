@@ -9,6 +9,7 @@ import streamlit as st
 from kiatracker.config import load_settings
 from kiatracker.dashboard.queries import Period, connect
 from kiatracker.dashboard.source import build_demo_database, may_show_personal, resolve_source
+from kiatracker.dashboard.ui import BRAND, LOGO, inject_style, sidebar_brand
 from kiatracker.dashboard.views import charging, costs, drives, overview
 from kiatracker.dashboard.views import range as range_page
 
@@ -35,7 +36,8 @@ def page_runner(module, db_path, period):
 
 
 def main() -> None:
-    st.set_page_config(page_title="EV3 tracker", page_icon=":material/electric_car:", layout="wide")
+    st.set_page_config(page_title=f"{BRAND} · EV3", page_icon=str(LOGO), layout="wide")
+    inject_style()
     source = resolve_source(load_settings().db_path)
     if source.demo:
         db_path = demo_database()
@@ -56,6 +58,7 @@ def main() -> None:
     start, end = (picked[0], picked[-1]) if isinstance(picked, tuple) and picked else (today, today)
     period = Period(start, end)
     st.sidebar.caption("Times are local (Europe/Budapest). Places are shown as home / other only.")
+    sidebar_brand()
 
     pages = [
         st.Page(

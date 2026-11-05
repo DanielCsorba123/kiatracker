@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from kiatracker.dashboard import charts, queries
-from kiatracker.dashboard.ui import empty, number, tiles
+from kiatracker.dashboard.ui import empty, number, page_header, tiles
 from kiatracker.forecast.model import NotEnoughData
 from kiatracker.forecast.outlook import LOCAL, daily_outlook, range_interval
 from kiatracker.forecast.train import Trained, car_state, train
@@ -55,7 +55,7 @@ def km_range(lo, mid, hi) -> str:
 
 
 def render(con, period: queries.Period) -> None:
-    st.title("Range")
+    page_header("Range", "How far the current charge goes in the coming days' weather.")
     try:
         trained = cached_train(fingerprint(con), con)
     except NotEnoughData as err:
@@ -81,9 +81,9 @@ def render(con, period: queries.Period) -> None:
             ),
             ("Battery", number(soc, "%"), None),
             (
-                "Model error (kWh/100 km)",
+                "Avg. error",
                 number(mae, digits=1),
-                f"Average error predicting later drives from earlier ones; a temperature-only model: "
+                f"In kWh/100 km, predicting later drives from earlier ones; a temperature-only model: "
                 f"{number(baseline, 'kWh/100 km', 1)}.",
             ),
             ("Trained on", number(model.n_drives, "drives"), None),

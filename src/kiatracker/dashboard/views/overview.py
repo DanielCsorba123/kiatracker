@@ -1,18 +1,18 @@
 import streamlit as st
 
 from kiatracker.dashboard import charts, queries
-from kiatracker.dashboard.ui import empty, number, tiles
+from kiatracker.dashboard.ui import empty, number, page_header, tiles
 
 
 def render(con, period: queries.Period) -> None:
-    st.title("Overview")
+    page_header("Overview", "Distance, efficiency and charging at a glance.")
     k = queries.kpis(con, period)
     tiles(
         [
             ("Distance", number(k["distance_km"], "km"), None),
             ("Drives", number(k["drives"]), None),
             (
-                "Consumption (kWh/100 km)",
+                "kWh / 100 km",
                 number(k["kwh_per_100km"], digits=1),
                 "Distance-weighted over drives of 5 km or more; shorter ones are too short to measure.",
             ),

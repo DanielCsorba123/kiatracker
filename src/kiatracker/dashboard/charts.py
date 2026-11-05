@@ -1,8 +1,11 @@
 """Altair chart builders: a DataFrame in, a chart out. No Streamlit, so they are unit-tested.
 
 Visual rules: one series per chart in the brand blue, thin marks with rounded bar ends, tooltips on every
-mark, a single y-axis, recessive grid. Two measures never share a chart.
+mark, a single y-axis, recessive grid. Two measures never share a chart. Every builder returns its chart in
+the Windrose house style (`house`): the app's fonts, a soft dashed grid, no frame, no axis lines.
 """
+
+import functools
 
 import altair as alt
 import pandas as pd
@@ -12,7 +15,49 @@ ORANGE = "#eb6834"  # categorical slot 2, for a second series when one is needed
 AQUA = "#1baf7a"  # categorical slot 3; the first three slots stay distinguishable for colour-blind readers
 INK = "#8a8985"  # whiskers: mid grey reads on both the light and the dark surface
 REFERENCE = "#9a9994"  # reference lines such as the perfect-prediction diagonal
-HEIGHT = 260
+HEIGHT = 280
+MUTED = "#8a8985"  # axis labels and grid: mid grey reads on both the light and the dark surface
+
+
+def house(chart):
+    """Windrose look: brand fonts, recessive dashed grid, no frame or axis lines, generous title spacing."""
+    return (
+        chart.configure(font="Inter")
+        .configure_view(stroke=None)
+        .configure_axis(
+            domain=False,
+            ticks=False,
+            labelColor=MUTED,
+            labelFontSize=11,
+            labelPadding=8,
+            titleColor=MUTED,
+            titleFontSize=11,
+            titleFontWeight=500,
+            titlePadding=12,
+            gridColor=MUTED,
+            gridOpacity=0.22,
+            gridDash=[2, 4],
+        )
+        .configure_title(font="Space Grotesk", fontSize=16, fontWeight=600, anchor="start", offset=14)
+        .configure_legend(
+            labelFont="Inter",
+            titleFont="Inter",
+            labelColor=MUTED,
+            titleColor=MUTED,
+            symbolType="circle",
+            symbolSize=90,
+        )
+    )
+
+
+def styled(builder):
+    """Return the builder's chart in the house style."""
+
+    @functools.wraps(builder)
+    def wrapper(*args, **kwargs):
+        return house(builder(*args, **kwargs))
+
+    return wrapper
 
 
 def _base(df: pd.DataFrame, title: str) -> alt.Chart:
@@ -44,16 +89,18 @@ def _tip(field: str, title: str | None = None):
     )
 
 
+@styled
 def bar(
     df: pd.DataFrame, x: str, y: str, title: str, y_title: str, color: str = BLUE, x_title=None
 ) -> alt.Chart:
     return (
         _base(df, title)
-        .mark_bar(color=color, cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+        .mark_bar(color=color, cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
         .encode(x=_x(x, x_title), y=alt.Y(y, title=y_title), tooltip=[_tip(x, x_title), _tip(y, y_title)])
     )
 
 
+@styled
 def predicted_vs_actual(df: pd.DataFrame, unit: str) -> alt.LayerChart:
     """Backtest predictions against what happened, on equal axes with a dashed perfect-prediction line."""
     values = pd.concat([df["predicted"], df["actual"]])
@@ -74,6 +121,7 @@ def predicted_vs_actual(df: pd.DataFrame, unit: str) -> alt.LayerChart:
     return alt.layer(points, diagonal)
 
 
+@styled
 def grouped_bar(
     df: pd.DataFrame, x: str, series: str, y: str, title: str, y_title: str, order: list[str]
 ) -> alt.Chart:
@@ -81,7 +129,7 @@ def grouped_bar(
     colors = alt.Scale(domain=order, range=[BLUE, ORANGE, AQUA][: len(order)])
     return (
         _base(df, title)
-        .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
         .encode(
             x=alt.X(f"{x}:O", title=None, axis=alt.Axis(labelAngle=0, grid=False)),
             xOffset=alt.XOffset(f"{series}:N", sort=order),
@@ -98,6 +146,7 @@ def grouped_bar(
     )
 
 
+@styled
 def points_with_bands(
     drives: pd.DataFrame,
     x: str,
@@ -113,7 +162,7 @@ def points_with_bands(
     chart_title = alt.Title(title, anchor="start")  # explain dots and lines in a themed caption, not here
     points = (
         alt.Chart(drives, title=chart_title)
-        .mark_circle(color=BLUE, size=60, opacity=0.7)
+        .mark_circle(color=BLUE, size=70, opacity=0.65)
         .encode(
             x=alt.X(f"{x}:Q", title=x_title, scale=alt.Scale(zero=False)),
             y=alt.Y(f"{y}:Q", title=y_title, scale=alt.Scale(zero=False)),
@@ -142,6 +191,7 @@ def points_with_bands(
     return alt.layer(points, averages).properties(height=HEIGHT)
 
 
+@styled
 def combined_scatter(drives: pd.DataFrame) -> alt.Chart:
     """Temperature, wind and trip length at once: x temperature, colour wind, dot size trip length."""
     return (
@@ -171,12 +221,13 @@ def combined_scatter(drives: pd.DataFrame) -> alt.Chart:
     )
 
 
+@styled
 def bar_with_interval(
     df: pd.DataFrame, x: str, y: str, lo: str, hi: str, title: str, y_title: str
 ) -> alt.LayerChart:
     """Bars for the expected value with a whisker for the likely range (e.g. 10th-90th percentile)."""
     base = _base(df, title)
-    bars = base.mark_bar(color=BLUE, cornerRadiusTopLeft=4, cornerRadiusTopRight=4, opacity=0.5).encode(
+    bars = base.mark_bar(color=BLUE, cornerRadiusTopLeft=6, cornerRadiusTopRight=6, opacity=0.5).encode(
         x=_x(x, None),
         y=alt.Y(f"{y}:Q", title=y_title),
         tooltip=[_tip(x), _tip(f"{y}:Q", "Expected"), _tip(f"{lo}:Q", "Low"), _tip(f"{hi}:Q", "High")],
@@ -185,18 +236,31 @@ def bar_with_interval(
     return alt.layer(bars, whiskers)
 
 
-def line(df: pd.DataFrame, x: str, y: str, title: str, y_title: str, color: str = BLUE) -> alt.Chart:
-    return (
-        _base(df, title)
-        .mark_line(color=color, strokeWidth=2, point=alt.OverlayMarkDef(color=color, size=64))
-        .encode(
-            x=_x(x, None),
-            y=alt.Y(y, title=y_title, scale=alt.Scale(zero=False)),
-            tooltip=[_tip(x), _tip(y, y_title)],
-        )
+@styled
+def line(df: pd.DataFrame, x: str, y: str, title: str, y_title: str, color: str = BLUE) -> alt.LayerChart:
+    """A trend line over a soft gradient area, with points to hover."""
+    gradient = alt.Gradient(
+        gradient="linear",
+        x1=1,
+        x2=1,
+        y1=1,
+        y2=0,
+        stops=[
+            alt.GradientStop(color=f"{color}00", offset=0),
+            alt.GradientStop(color=f"{color}66", offset=1),
+        ],
     )
+    encoding = {"x": _x(x, None), "y": alt.Y(y, title=y_title, scale=alt.Scale(zero=False))}
+    base = _base(df, title)
+    area = base.mark_area(color=gradient, interpolate="monotone").encode(**encoding)
+    trend = base.mark_line(color=color, strokeWidth=2.5, interpolate="monotone").encode(**encoding)
+    points = base.mark_circle(color=color, size=70, opacity=1).encode(
+        **encoding, tooltip=[_tip(x), _tip(y, y_title)]
+    )
+    return alt.layer(area, trend, points)
 
 
+@styled
 def scatter(
     df: pd.DataFrame, x: str, y: str, title: str, x_title: str, y_title: str, tooltip: list[str]
 ) -> alt.Chart:
@@ -211,6 +275,7 @@ def scatter(
     )
 
 
+@styled
 def histogram(
     df: pd.DataFrame,
     column: str,
@@ -223,7 +288,7 @@ def histogram(
     scale = alt.Scale(domain=list(extent)) if extent else alt.Undefined
     return (
         _base(df, title)
-        .mark_bar(color=BLUE, cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+        .mark_bar(color=BLUE, cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
         .encode(
             x=alt.X(f"{column}:Q", bin=bins, scale=scale, title=x_title or column, axis=alt.Axis(format="d")),
             y=alt.Y("count():Q", title="Sessions"),

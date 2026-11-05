@@ -4,15 +4,44 @@ gatherUsageStats = false  # don't send usage statistics to Streamlit
 
 [server]
 headless = true
-
-# Light and dark both defined, no fixed base: the dashboard follows the viewer's system setting,
-# and the "Settings" item in the top-right menu switches between them.
-[theme.light]
-primaryColor = "#2a78d6"
-
-[theme.dark]
-primaryColor = "#3987e5"
+enableStaticServing = true  # fonts and logo from src/kiatracker/dashboard/static, no third-party requests
 
 [client]
 toolbarMode = "viewer"  # hide developer options such as Deploy
 showErrorDetails = "none"  # no stack traces or file paths in the browser
+
+# Windrose identity. No fixed base: the dashboard follows the viewer's light/dark setting, and the
+# "Settings" item in the top-right menu switches between the two palettes below.
+[theme]
+font = "Inter"
+headingFont = "Space Grotesk"
+headingFontWeights = [700, 600, 600, 600, 600, 600]
+metricValueFontSize = "2.1rem"
+metricValueFontWeight = 600
+baseRadius = "0.85rem"
+showSidebarBorder = true
+chartCategoricalColors = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
+
+[[theme.fontFaces]]
+family = "Inter"
+url = "app/static/inter-var.woff2"
+weight = "100 900"
+
+[[theme.fontFaces]]
+family = "Space Grotesk"
+url = "app/static/space-grotesk-var.woff2"
+weight = "300 700"
+
+[theme.light]
+primaryColor = "#2a78d6"
+backgroundColor = "#fbfbfa"
+secondaryBackgroundColor = "#f1f3f6"
+textColor = "#16191f"
+borderColor = "#e2e5ea"
+
+[theme.dark]
+primaryColor = "#3987e5"
+backgroundColor = "#0f1217"
+secondaryBackgroundColor = "#171b22"
+textColor = "#e9ebef"
+borderColor = "#262b34"

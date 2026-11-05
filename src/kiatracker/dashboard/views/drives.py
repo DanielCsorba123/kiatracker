@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import streamlit as st
 
 from kiatracker.dashboard import charts, queries
-from kiatracker.dashboard.ui import empty
+from kiatracker.dashboard.ui import empty, page_header
 
 
 @dataclass(frozen=True)
@@ -58,7 +58,7 @@ def factor_section(con, period, measured, factor: Factor) -> None:
 
 
 def render(con, period: queries.Period) -> None:
-    st.title("Drives")
+    page_header("Drives", "Every drive against temperature, wind, trip length and speed.")
     drives = queries.drives(con, period)
     if drives.empty:
         empty("No drives in this period yet.")

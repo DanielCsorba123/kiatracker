@@ -1,13 +1,13 @@
 import streamlit as st
 
 from kiatracker.dashboard import charts, queries
-from kiatracker.dashboard.ui import empty, number, tiles
+from kiatracker.dashboard.ui import empty, number, page_header, tiles
 
 FULL = 95  # sessions ending at or above this count as charging to full
 
 
 def render(con, period: queries.Period) -> None:
-    st.title("Charging")
+    page_header("Charging", "When the car charges, how much, and how full.")
     sessions = queries.charging_sessions(con, period)
     if sessions.empty:
         empty("No finished charging sessions in this period yet.")

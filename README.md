@@ -1,4 +1,9 @@
-# kiatracker
+<p align="center"><img src="src/kiatracker/dashboard/static/windrose.svg" width="72" alt="Windrose logo"></p>
+
+<h1 align="center">Windrose</h1>
+<p align="center"><b>How far an EV3 really goes, in real weather.</b><br>
+<sub>kiatracker: a personal data platform and range model for a Kia EV3</sub></p>
+
 
 A personal data platform for a Kia EV3: it collects the car's own data through the official EU Data Act API, models every drive and charge, and joins them with weather. The goal is to answer how much range wind, cold and route really cost, and later to forecast it.
 

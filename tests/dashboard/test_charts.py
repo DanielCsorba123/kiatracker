@@ -143,3 +143,35 @@ def test_combined_chart_encodes_temperature_wind_and_length():
     assert enc["x"]["field"] == "temp_c" and enc["y"]["field"] == "kwh_per_100km"
     assert enc["color"]["field"] == "wind_kph" and enc["size"]["field"] == "distance_km"
     assert enc["color"]["legend"]["title"] and enc["size"]["legend"]["title"]
+
+
+def all_charts():
+    bands = BANDS
+    yield charts.bar(DF, "week:T", "km:Q", "t", "km")
+    yield charts.line(DF, "week:T", "cons:Q", "t", "kWh")
+    yield charts.scatter(DF, "temp:Q", "cons:Q", "t", "x", "y", ["temp:Q"])
+    yield charts.histogram(DF, "km", "t", step=10)
+    yield charts.points_with_bands(DRIVES, "temp_c", bands, "t", "°C")
+    yield charts.combined_scatter(DRIVES)
+    yield charts.predicted_vs_actual(pd.DataFrame({"predicted": [1.0, 2.0], "actual": [1.5, 2.5]}), "kWh")
+    yield charts.bar_with_interval(
+        pd.DataFrame({"d": ["a"], "v": [1.0], "l": [0.5], "h": [1.5]}), "d:O", "v", "l", "h", "t", "km"
+    )
+    yield charts.grouped_bar(
+        pd.DataFrame({"m": ["x"], "s": ["EV"], "v": [1.0]}), "m", "s", "v", "t", "Ft", ["EV"]
+    )
+
+
+def test_every_chart_wears_the_house_style():
+    for chart in all_charts():
+        config = chart.to_dict()["config"]
+        assert config["font"] == "Inter"
+        assert config["title"]["font"] == "Space Grotesk"
+        assert config["view"]["stroke"] is None
+        assert config["axis"]["domain"] is False and config["axis"]["gridDash"]
+
+
+def test_trend_line_has_a_gradient_area_under_it():
+    spec = charts.line(DF, "week:T", "cons:Q", "t", "kWh").to_dict()
+    area = next(layer for layer in spec["layer"] if layer["mark"]["type"] == "area")
+    assert area["mark"]["color"]["gradient"] == "linear"
