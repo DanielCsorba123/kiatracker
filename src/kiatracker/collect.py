@@ -29,6 +29,7 @@ class PollResult:
     new: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     summary: str = ""
+    active: bool = False  # ignition on: worth polling more often
 
 
 def load_state(raw_dir: Path) -> dict:
@@ -127,6 +128,7 @@ def poll(client: PleosClient, vin: str, raw_dir: Path, now: datetime | None = No
     except _SkipTrips:
         pass
 
+    result.active = ((data.get("driving") or {}).get("ignition") or {}).get("status") == "on"
     result.summary = summarize(data, state, "locations" in result.new, result, now)
     save_state(raw_dir, state)
     return result

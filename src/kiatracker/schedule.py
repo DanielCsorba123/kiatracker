@@ -16,6 +16,7 @@ class Job:
     every: timedelta
     run: Callable[[], object]
     first_delay: timedelta = timedelta(0)
+    next_every: Callable[[object], timedelta] | None = None  # pick the next interval from run()'s result
     next_at: datetime | None = field(default=None, init=False)
 
 
@@ -32,14 +33,17 @@ def run_jobs(
         current = now()
         for job in jobs:
             if current >= job.next_at:
+                every = job.every
                 try:
-                    job.run()
+                    result = job.run()
+                    if job.next_every is not None:
+                        every = job.next_every(result)
                 except Exception as err:  # keep collecting whatever one job does
                     print(
                         f"{current:%m-%d %H:%M}  {job.name} failed: {type(err).__name__}: {err}", flush=True
                     )
-                job.next_at += job.every
+                job.next_at += every
                 if job.next_at <= current:  # fell behind (e.g. the Pi was suspended): don't run in a burst
-                    job.next_at = current + job.every
+                    job.next_at = current + every
         wait = min(job.next_at for job in jobs) - now()
         sleep(max(1.0, wait.total_seconds()))

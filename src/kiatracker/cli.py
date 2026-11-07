@@ -43,24 +43,35 @@ def vin_for(client: PleosClient, settings: Settings) -> str:
     return vehicles[0]["vin"]
 
 
-def cmd_collect(settings: Settings, args) -> int:
-    if not settings.client_id or not settings.client_secret:
-        print(
-            "Set PLEOS_API_KEY_CLIENT_ID and PLEOS_API_KEY_CLIENT_SECRET (environment or .env)",
-            file=sys.stderr,
-        )
-        return 2
+def collect_once(settings: Settings):
+    """One poll; returns the PollResult, or None if it failed (the reason is printed)."""
     client = PleosClient(settings.client_id, settings.client_secret)
     try:
         result = poll(client, vin_for(client, settings), settings.raw_dir)
     except PleosError as err:
         print(f"{datetime.now():%m-%d %H:%M}  collect failed: {err} ({err.status} {err.code})", flush=True)
-        return 1
+        return None
     except httpx.HTTPError as err:  # e.g. the PC just woke up and has no network yet
         print(f"{datetime.now():%m-%d %H:%M}  collect failed: {type(err).__name__}", flush=True)
-        return 1
+        return None
     print(f"{datetime.now():%m-%d %H:%M}  {result.summary}", flush=True)
-    return 0
+    return result
+
+
+def has_credentials(settings: Settings) -> bool:
+    if not settings.client_id or not settings.client_secret:
+        print(
+            "Set PLEOS_API_KEY_CLIENT_ID and PLEOS_API_KEY_CLIENT_SECRET (environment or .env)",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def cmd_collect(settings: Settings, args) -> int:
+    if not has_credentials(settings):
+        return 2
+    return 0 if collect_once(settings) else 1
 
 
 def cmd_build(settings: Settings, args) -> int:
@@ -117,11 +128,22 @@ def cmd_refresh(settings: Settings, args) -> int:
 
 
 def cmd_scheduler(settings: Settings, args) -> int:
-    """Long-running loop for the container: collect every 5 minutes, refresh hourly (after the first poll)."""
-    print("Scheduler started: collect every 5 min, refresh every hour", flush=True)
+    """Long-running loop for the container: collect every minute while the car is driven and every 5
+    minutes otherwise, refresh hourly (after the first poll)."""
+    print("Scheduler started: collect every 1 min while driving, else 5 min; refresh every hour", flush=True)
+
+    def collect() -> bool:
+        result = collect_once(settings) if has_credentials(settings) else None
+        return bool(result and result.active)
+
     run_jobs(
         [
-            Job("collect", timedelta(minutes=5), lambda: cmd_collect(settings, args)),
+            Job(
+                "collect",
+                timedelta(minutes=5),
+                collect,
+                next_every=lambda driving: timedelta(minutes=1) if driving else timedelta(minutes=5),
+            ),
             Job(
                 "refresh",
                 timedelta(hours=1),

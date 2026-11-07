@@ -125,3 +125,8 @@ def test_network_error_on_one_group_is_logged_and_poll_continues(tmp_path):
     assert error["endpoint"] == "batteries" and error["exception"] == "ConnectError"
     assert result.errors == ["batteries"]
     assert (tmp_path / STATE_FILE).exists()
+
+
+def test_poll_reports_whether_the_car_is_being_driven(tmp_path):
+    parked = poll(FakeClient(), "VIN1", tmp_path, now=NOW)
+    assert parked.active is False

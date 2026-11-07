@@ -40,3 +40,23 @@ def test_a_failing_job_does_not_stop_the_others(capsys):
     run_jobs(jobs, now=clock.now, sleep=clock.sleep, until=lambda: clock.t >= end)
     assert len(ran) == 6
     assert "refresh failed: RuntimeError" in capsys.readouterr().out
+
+
+def test_job_can_choose_its_next_interval_from_its_result():
+    clock, ran = Clock(), []
+    end = clock.t + timedelta(minutes=30)
+    driving = iter([True] * 10 + [False] * 100)  # driving for the first ten polls
+
+    def poll():
+        ran.append(clock.t)
+        return next(driving)
+
+    job = Job(
+        "collect",
+        timedelta(minutes=5),
+        poll,
+        next_every=lambda active: timedelta(minutes=1) if active else timedelta(minutes=5),
+    )
+    run_jobs([job], now=clock.now, sleep=clock.sleep, until=lambda: clock.t >= end)
+    gaps = [(b - a).total_seconds() / 60 for a, b in zip(ran, ran[1:], strict=False)]
+    assert gaps[:9] == [1] * 9 and set(gaps[10:]) == {5}
