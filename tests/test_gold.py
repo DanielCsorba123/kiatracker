@@ -233,3 +233,39 @@ def test_split_keeps_the_last_part_in_progress_while_driving():
     )
     first, second = drives_of(r)
     assert not first.in_progress and second.in_progress
+
+
+def test_drive_hidden_in_a_collection_gap_keeps_its_distance_but_not_its_energy():
+    """The Krems day: collector off overnight, unseen charge, then 358 km; only the two ends exist."""
+    r = Readings(
+        battery=[bat(0, 59.5), bat(19 * 60, 19.5)],
+        driving=[drv(0, 76784.2, False), drv(19 * 60, 77142.1, False)],
+    )
+    [d] = drives_of(r)
+    assert d.distance_km == pytest.approx(357.9)
+    assert d.quality == "gap"
+    assert d.energy_kwh is None and d.kwh_per_100km is None
+
+
+def test_impossible_consumption_is_flagged():
+    # 20 km on 1 % of an 81.4 kWh battery would be 4 kWh/100 km: not a real measurement
+    r = Readings(
+        battery=[bat(0, 80.0), bat(5, 80.0), bat(25, 79.0)],
+        driving=[drv(0, 1000.0, False), drv(5, 1010.0, True), drv(25, 1020.0, False)],
+    )
+    [d] = drives_of(r)
+    assert d.quality == "implausible" and d.kwh_per_100km is None
+
+
+def test_charge_rising_during_a_drive_is_flagged():
+    r = Readings(
+        battery=[bat(0, 50.0), bat(5, 49.0), bat(30, 70.0)],
+        driving=[drv(0, 1000.0, False), drv(5, 1004.0, True), drv(30, 1020.0, False)],
+    )
+    [d] = drives_of(r)
+    assert d.quality == "implausible" and d.energy_kwh is None
+
+
+def test_normal_drive_is_ok():
+    [d] = drives_of(simple_drive())
+    assert d.quality == "ok"

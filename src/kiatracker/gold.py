@@ -6,13 +6,15 @@ between the last parked reading and the first moving one. API trips (exact start
 
 from bisect import bisect_right
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from kiatracker.model import BatteryReading, DrivingReading, LocationReading, Readings
 from kiatracker.privacy import zone_of
 
 MOVE_THRESHOLD_KM = 0.05
 MIN_KM_FOR_CONSUMPTION = 5.0  # below this, 0.5 % SOC steps make kWh/100 km meaningless
+UNSEEN_AFTER = timedelta(hours=1)  # a drive seen only as an odometer jump across this much silence
+PLAUSIBLE_KWH_100KM = (6.0, 45.0)  # outside this an EV3's measured consumption is a data problem
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,7 @@ class Drive:
     api_trips: int
     location_points: int
     in_progress: bool
+    quality: str = "ok"  # "gap": energy unknown (unseen period); "implausible": energy impossible
 
 
 @dataclass(frozen=True)
@@ -179,6 +182,9 @@ def derive_drives(
         soc_end = getattr(battery.latest_at(last.ts), "soc", None)
         energy = kwh(diff(soc_start, soc_end), capacity_kwh)
         distance = diff(last.odometer_km, start.odometer_km)
+        quality = drive_quality(start, first, energy, distance)
+        if quality != "ok":
+            energy = None  # the distance (odometer) is still exact; the energy is not
         loc_start: LocationReading | None = locations.latest_at(start.ts)
         loc_end: LocationReading | None = locations.latest_at(last.ts)
         inside = [p for p in r.location if start_ts <= p.ts <= end_ts]
@@ -212,9 +218,27 @@ def derive_drives(
                 api_trips=len(trips),
                 location_points=len(inside),
                 in_progress=end is None,
+                quality=quality,
             )
         )
     return drives
+
+
+def drive_quality(start: DrivingReading, first: DrivingReading, energy, distance) -> str:
+    """Guardrails against energy figures that can't be right.
+
+    "gap": the drive was only seen as an odometer jump across more than an hour without readings (the
+    collector was off). Charging may hide in that time, as it did when the car left fully charged but the
+    last reading said 59.5 %. "implausible": consumption outside what an EV3 can use, or charge rising.
+    """
+    if not first.ignition_on and first.ts - start.ts > UNSEEN_AFTER:
+        return "gap"
+    if energy is not None and energy < 0:
+        return "implausible"
+    measured = per_100km(energy, distance)
+    if measured is not None and not PLAUSIBLE_KWH_100KM[0] <= measured <= PLAUSIBLE_KWH_100KM[1]:
+        return "implausible"
+    return "ok"
 
 
 def derive_charging_sessions(

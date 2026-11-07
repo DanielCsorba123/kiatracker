@@ -122,6 +122,10 @@ def for_analysts(con, period, measured, drives) -> None:
                 "wind_kph": st.column_config.NumberColumn("Wind km/h", format="%.0f"),
                 "start_zone": "From",
                 "end_zone": "To",
+                "quality": st.column_config.TextColumn(
+                    "Quality",
+                    help="gap: collector was off, so energy is unknown; implausible: impossible energy",
+                ),
             },
         )
 

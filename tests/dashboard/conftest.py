@@ -43,17 +43,17 @@ def tiny(tmp_path):
             con.execute(
                 "create table drives (start_ts timestamp, end_ts timestamp, distance_km double, "
                 "energy_kwh double, kwh_per_100km double, start_zone varchar, end_zone varchar, "
-                "in_progress boolean)"
+                "in_progress boolean, quality varchar)"
             )
             for day, km, kwh in ((3, 60, 9), (10, 40, 6)):
                 con.execute(
-                    "insert into drives values (?, ?, ?, ?, ?, 'home', 'other', false)",
+                    "insert into drives values (?, ?, ?, ?, ?, 'home', 'other', false, 'ok')",
                     [f"2026-11-{day:02d} 08:00", f"2026-11-{day:02d} 09:00", km, kwh, consumption],
                 )
             if unfinished:  # the car was still on when the database was built
                 con.execute(
                     "insert into drives values ('2026-11-12 08:00', '2026-11-12 08:00', 0.4, null, null, "
-                    "'home', null, true)"
+                    "'home', null, true, 'ok')"
                 )
             con.execute(
                 "create table fuel_prices (week varchar, at_petrol_eur double, at_diesel_eur double, "

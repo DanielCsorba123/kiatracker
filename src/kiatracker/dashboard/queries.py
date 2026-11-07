@@ -54,7 +54,7 @@ def consumption(energy: pd.Series, distance: pd.Series) -> float | None:
 
 
 def _drives(con, period: Period) -> pd.DataFrame:
-    sql = """select start_ts, end_ts, distance_km, energy_kwh, kwh_per_100km, start_zone, end_zone
+    sql = """select start_ts, end_ts, distance_km, energy_kwh, kwh_per_100km, start_zone, end_zone, quality
              from drives where start_ts >= ? and start_ts < ? and distance_km is not null
                and not in_progress"""  # a drive still under way has no end, energy or weather yet
     df = con.execute(sql, list(period.utc_bounds())).df()
@@ -124,6 +124,7 @@ def drives(con, period: Period) -> pd.DataFrame:
         "wind_kph",
         "start_zone",
         "end_zone",
+        "quality",
     ]
     return d.sort_values("start_local", ascending=False)[columns].reset_index(drop=True)
 
