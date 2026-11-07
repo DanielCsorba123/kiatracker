@@ -1,7 +1,8 @@
 """Time-ordered backtest: train only on earlier drives, predict the next block, compare with baselines.
 
-Baselines: the training mean, and a straight line in temperature. The physics model has to beat both to be
-worth its complexity; the out-of-sample residuals also give the prediction interval.
+References: the training mean and a straight line in temperature (deliberately dumb baselines), and the
+car-spec physics with nothing fitted. The fitted model has to beat them to be worth its complexity; its
+out-of-sample residuals also give the prediction interval.
 """
 
 from collections.abc import Iterator
@@ -33,16 +34,19 @@ def _scores(actual: np.ndarray, predicted: np.ndarray) -> dict[str, float]:
     return {"mae": float(np.mean(np.abs(error))), "rmse": float(np.sqrt(np.mean(error**2)))}
 
 
-def backtest(rows: list[dict], folds: int = 5) -> dict | None:
-    actual, model, mean, temperature, predictions = [], [], [], [], []
+def backtest(
+    rows: list[dict], folds: int = 5, prior: dict[str, float] | None = None, strength: float = 0.0
+) -> dict | None:
+    actual, model, mean, temperature, specs, predictions = [], [], [], [], [], []
     for train, test in time_folds(rows, folds):
-        coef = fit_coefficients(train)
+        coef = fit_coefficients(train, prior=prior, strength=strength)
         y = [r["kwh_per_100km"] for r in test]
         predicted = predict_rows(coef, test)
         actual += y
         model += list(predicted)
         mean += [float(np.mean([r["kwh_per_100km"] for r in train]))] * len(test)
         temperature += list(_linear_in_temperature(train, test))
+        specs += list(predict_rows(prior, test)) if prior else [float("nan")] * len(test)
         predictions += [
             {"start_ts": r["start_ts"], "actual": a, "predicted": float(p)}
             for r, a, p in zip(test, y, predicted, strict=True)
@@ -54,6 +58,7 @@ def backtest(rows: list[dict], folds: int = 5) -> dict | None:
         "model": _scores(a, np.array(model)),
         "mean": _scores(a, np.array(mean)),
         "temperature_only": _scores(a, np.array(temperature)),
+        **({"specs": _scores(a, np.array(specs))} if prior else {}),
         "predictions": predictions,
         "residuals": list(a - np.array(model)),
     }

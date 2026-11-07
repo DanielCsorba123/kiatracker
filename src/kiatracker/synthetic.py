@@ -53,7 +53,8 @@ class DayWeather:
 
 def true_consumption(speed: float, headwind: float, temp: float) -> float:
     heat = max(0.0, T_BASE - temp) / speed
-    return TRUTH["c0"] + TRUTH["c_aero"] * (speed + headwind) ** 2 + TRUTH["c_heat"] * heat
+    density = 288.15 / (273.15 + temp)  # cold air is denser, as in the model's features
+    return TRUTH["c0"] + TRUTH["c_aero"] * (speed + headwind) ** 2 * density + TRUTH["c_heat"] * heat
 
 
 def iso(ts: datetime) -> str:

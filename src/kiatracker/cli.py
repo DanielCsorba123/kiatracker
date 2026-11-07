@@ -163,8 +163,10 @@ def cmd_train(settings: Settings, args) -> int:
     print(f"Trained on {trained.model.n_drives} drives.")
     if trained.backtest:
         print("Backtest, predicting later drives from earlier ones (MAE, kWh/100 km):")
-        for name in ("model", "temperature_only", "mean"):
-            print(f"  {name:17} {trained.backtest[name]['mae']:.2f}")
+        for name in ("model", "specs", "temperature_only", "mean"):
+            if name in trained.backtest:
+                print(f"  {name:17} {trained.backtest[name]['mae']:.2f}")
+        print(f"Pull toward the car-spec physics: {trained.model.prior_strength:g} drives' worth")
     for line in trained.model.explain(trained.typical_speed_kph):
         print(line)
     return 0

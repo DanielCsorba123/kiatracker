@@ -25,9 +25,17 @@ COLUMNS = (
 )
 
 
+def air_density_ratio(temp_c: float) -> float:
+    """Air density relative to 15 °C: cold air is denser, so the same airspeed costs more drag."""
+    return 288.15 / (273.15 + temp_c)
+
+
 def physics(speed_kph: float, temp_c: float, airspeed_sq: float) -> dict:
     """The model's two weather features for a speed, temperature and squared airspeed."""
-    return {"aero": airspeed_sq, "heat": max(0.0, T_BASE - temp_c) / speed_kph}
+    return {
+        "aero": airspeed_sq * air_density_ratio(temp_c),
+        "heat": max(0.0, T_BASE - temp_c) / speed_kph,
+    }
 
 
 def drive_features(con: duckdb.DuckDBPyConnection) -> list[dict]:

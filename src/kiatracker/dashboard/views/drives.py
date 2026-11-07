@@ -86,7 +86,7 @@ def range_in_conditions(con) -> None:
         )
     else:
         st.caption(
-            "Generic physics for a compact electric SUV: your own model takes over once it predicts "
+            "Physics from the EV3's specifications: your own model takes over once it predicts "
             "better than "
             "the simple average (see the Range page). Wind is averaged over all directions."
         )

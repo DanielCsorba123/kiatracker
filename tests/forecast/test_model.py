@@ -68,3 +68,21 @@ def test_save_and_load_round_trip(demo, tmp_path):
 def test_explanations_use_plain_units(demo):
     lines = fit(drive_features(demo)).explain(speed_kph=50)
     assert any("headwind" in line for line in lines) and any("°C" in line for line in lines)
+
+
+def test_strong_pull_keeps_coefficients_at_the_prior_and_none_is_a_plain_fit():
+    from kiatracker.forecast.model import fit_coefficients
+
+    prior = {"c0": 6.0, "aero": 0.001, "heat": 15.0}
+    rows = [row(aero=2500 + 300 * (i % 5), heat=(i % 4) / 10, kwh=20.0 + (i % 3)) for i in range(20)]
+    pulled = fit_coefficients(rows, prior=prior, strength=1e6)
+    assert pulled == pytest.approx(prior, rel=0.02)
+    assert fit_coefficients(rows, prior=prior, strength=0) == pytest.approx(fit_coefficients(rows), rel=1e-6)
+
+
+def test_training_reports_the_specs_model_and_the_chosen_pull(demo):
+    from kiatracker.forecast.train import train
+
+    trained = train(demo)
+    assert {"model", "specs", "mean", "temperature_only"} <= set(trained.backtest)
+    assert trained.model.prior_strength >= 0

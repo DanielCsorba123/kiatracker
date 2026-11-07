@@ -5,27 +5,29 @@ import pandas as pd
 
 from kiatracker.forecast.model import NotEnoughData, RangeModel
 from kiatracker.forecast.outlook import range_interval
-from kiatracker.forecast.train import train
+from kiatracker.forecast.train import PRIOR_COEF, train
 
-# Until the car's own model beats the simple baseline, scenarios use generic physics for a compact
-# electric SUV (the same values the simulator drives with). The dashboard says which one it shows.
+# Until the car's own model predicts better, scenarios use physics from the EV3's specifications.
+# The dashboard says which one it shows.
 PRIOR = RangeModel(
-    coef={"c0": 10.0, "aero": 0.0011, "heat": 12.0},
+    coef=PRIOR_COEF,
     residual_q10=-1.5,
     residual_q90=1.5,
     n_drives=0,
-    trained_at="physics prior",
+    trained_at="car specs",
 )
 
 
 def choose_model(con: duckdb.DuckDBPyConnection) -> tuple[RangeModel, str]:
-    """The trained model if its backtest beats predicting the average, else the physics prior."""
+    """The trained model if its backtest beats both the average and the car-spec physics, else the specs."""
     try:
         trained = train(con)
     except NotEnoughData:
         return PRIOR, "prior"
     scores = trained.backtest
-    if scores and scores["model"]["mae"] < scores["mean"]["mae"]:
+    if scores and scores["model"]["mae"] < min(
+        scores["mean"]["mae"], scores.get("specs", {}).get("mae", 1e9)
+    ):
         return trained.model, "trained"
     return PRIOR, "prior"
 

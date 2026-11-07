@@ -33,6 +33,7 @@ class RangeModel:
     residual_q90: float
     n_drives: int
     trained_at: str
+    prior_strength: float = 0.0  # how strongly the fit was pulled toward the car-spec physics
 
     def predict(self, speed_kph: float, temp_c: float, airspeed_sq: float) -> float:
         x = physics(speed_kph, temp_c, airspeed_sq)
@@ -62,25 +63,43 @@ class RangeModel:
         return cls(**json.loads(path.read_text(encoding="utf-8")))
 
 
-def fit_coefficients(rows: list[dict], features: tuple[str, ...] = FEATURES) -> dict[str, float]:
-    """Distance-weighted least squares with every coefficient, the intercept included, kept non-negative.
+def fit_coefficients(
+    rows: list[dict],
+    features: tuple[str, ...] = FEATURES,
+    prior: dict[str, float] | None = None,
+    strength: float = 0.0,
+) -> dict[str, float]:
+    """Distance-weighted least squares with every coefficient, the intercept included, kept non-negative,
+    optionally pulled toward `prior` (ridge regression toward the car-spec physics).
 
-    With three parameters, exact non-negative least squares is cheap: fit each subset of free coefficients
-    (the rest held at zero) and keep the feasible fit with the smallest weighted error.
+    The pull adds one pseudo-observation per coefficient, worth `strength` average drives, saying
+    "this coefficient is the prior". Few drives: the prior dominates; many drives: the data does.
+    Non-negativity is exact: fit each subset of free coefficients (the rest held at zero), keep the best.
     """
     names = ("c0", *features)
     y = np.array([r["kwh_per_100km"] for r in rows], dtype=float)
     w = np.sqrt(np.array([r["distance_km"] for r in rows], dtype=float))  # longer drives are measured better
     columns = {"c0": np.ones(len(rows))} | {f: np.array([r[f] for r in rows], dtype=float) for f in features}
-    best, best_error = dict.fromkeys(names, 0.0), float(np.sum((y * w) ** 2))
-    for free in chain.from_iterable(combinations(names, k) for k in range(1, len(names) + 1)):
-        x = np.column_stack([columns[n] for n in free])
-        beta, *_ = np.linalg.lstsq(x * w[:, None], y * w, rcond=None)
+    # augmented system: data rows, then one penalty row per coefficient
+    a_rows = [np.column_stack([columns[n] for n in names]) * w[:, None]]
+    b_rows = [y * w]
+    if prior is not None and strength > 0:
+        pull = np.sqrt(strength * np.mean(w**2))
+        for i, n in enumerate(names):
+            scale = max(float(np.mean(np.abs(columns[n]))), 1e-9)  # coefficient units -> kWh/100 km
+            row = np.zeros(len(names))
+            row[i] = pull * scale
+            a_rows.append(row[None, :])
+            b_rows.append(np.array([pull * scale * prior[n]]))
+    a, b = np.vstack(a_rows), np.concatenate(b_rows)
+    best, best_error = dict.fromkeys(names, 0.0), float(np.sum(b**2))
+    for free in chain.from_iterable(combinations(range(len(names)), k) for k in range(1, len(names) + 1)):
+        beta, *_ = np.linalg.lstsq(a[:, free], b, rcond=None)
         if np.any(beta < 0):
             continue
-        error = float(np.sum(((y - x @ beta) * w) ** 2))
+        error = float(np.sum((b - a[:, free] @ beta) ** 2))
         if error < best_error:
-            best = dict.fromkeys(names, 0.0) | {n: float(b) for n, b in zip(free, beta, strict=True)}
+            best = dict.fromkeys(names, 0.0) | {names[i]: float(v) for i, v in zip(free, beta, strict=True)}
             best_error = error
     return best
 
@@ -89,14 +108,19 @@ def predict_rows(coef: dict[str, float], rows: list[dict]) -> np.ndarray:
     return np.array([coef["c0"] + sum(coef[f] * r[f] for f in FEATURES) for r in rows])
 
 
-def fit(rows: list[dict], residuals: list[float] | None = None) -> RangeModel:
+def fit(
+    rows: list[dict],
+    residuals: list[float] | None = None,
+    prior: dict[str, float] | None = None,
+    strength: float = 0.0,
+) -> RangeModel:
     """Fit on all rows. Pass out-of-sample residuals (from a backtest) for honest intervals."""
     if len(rows) < MIN_DRIVES:
         raise NotEnoughData(MIN_DRIVES - len(rows))
-    coef = fit_coefficients(rows)
+    coef = fit_coefficients(rows, prior=prior, strength=strength)
     if residuals is None or len(residuals) < 5:
         residuals = list(np.array([r["kwh_per_100km"] for r in rows]) - predict_rows(coef, rows))
     q10, q90 = np.quantile(residuals, QUANTILES)
     return RangeModel(
-        coef, float(q10), float(q90), len(rows), datetime.now(UTC).isoformat(timespec="seconds")
+        coef, float(q10), float(q90), len(rows), datetime.now(UTC).isoformat(timespec="seconds"), strength
     )
