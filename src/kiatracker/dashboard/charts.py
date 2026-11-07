@@ -222,6 +222,95 @@ def combined_scatter(drives: pd.DataFrame) -> alt.Chart:
 
 
 @styled
+def effect_bars(effects: pd.DataFrame) -> alt.LayerChart:
+    """Extra kWh/100 km in harder vs easier conditions, one bar per factor; grey until there's enough data."""
+    df = effects.assign(
+        condition=effects["factor"] + ": " + effects["harder_label"] + " vs " + effects["easier_label"],
+        shown=effects["diff_kwh"].where(effects["enough"], 0).fillna(0),
+        label=[
+            f"{d:+.1f} kWh/100 km ({p:+.0%})" if ok and d is not None else "needs more drives"
+            for d, p, ok in zip(effects["diff_kwh"], effects["pct"], effects["enough"], strict=True)
+        ],
+    )
+    y = alt.Y("condition:N", sort=None, title=None, axis=alt.Axis(labelLimit=320, labelFontSize=12))
+    base = alt.Chart(df, title=alt.Title("What changes your consumption", anchor="start"))
+    bars = base.mark_bar(cornerRadiusEnd=6, height=22).encode(
+        x=alt.X("shown:Q", title="Extra energy per 100 km (kWh), harder vs easier conditions"),
+        y=y,
+        color=alt.condition("datum.enough", alt.value(ORANGE), alt.value(MUTED)),
+        tooltip=[
+            alt.Tooltip("condition:N", title="Comparison"),
+            _tip("harder_kwh:Q", "Harder, kWh/100 km"),
+            _tip("easier_kwh:Q", "Easier, kWh/100 km"),
+            alt.Tooltip("n_harder:Q", title="Drives (harder)"),
+            alt.Tooltip("n_easier:Q", title="Drives (easier)"),
+        ],
+    )
+    labels = base.mark_text(align="left", dx=8, fontSize=12, color=MUTED).encode(
+        x="shown:Q", y=y, text="label:N"
+    )
+    return alt.layer(bars, labels).properties(height=46 * len(df))
+
+
+@styled
+def range_heatmap(grid: pd.DataFrame, title: str) -> alt.LayerChart:
+    """Range in km for every temperature (columns) and wind speed (rows); darker means further."""
+    mid = (grid["range_km"].min() + grid["range_km"].max()) / 2
+    base = alt.Chart(grid, title=alt.Title(title, anchor="start"))
+    gap = alt.Scale(paddingInner=0.08)  # even gaps between rounded tiles, so no background shows at corners
+    x = alt.X(
+        "temp_c:O", title="Outside temperature (°C)", scale=gap, axis=alt.Axis(labelAngle=0, grid=False)
+    )
+    y = alt.Y("wind_kph:O", title="Wind (km/h)", sort="descending", scale=gap, axis=alt.Axis(grid=False))
+    cells = base.mark_rect(cornerRadius=6, stroke=None).encode(
+        x=x,
+        y=y,
+        color=alt.Color("range_km:Q", scale=alt.Scale(range=["#cde2fb", "#104281"]), legend=None),
+        tooltip=[
+            _tip("temp_c:O", "°C"),
+            _tip("wind_kph:O", "Wind km/h"),
+            alt.Tooltip("range_km:Q", title="Range (km)", format=",.0f"),
+        ],
+    )
+    labels = base.mark_text(fontSize=13, fontWeight=600, font="Space Grotesk").encode(
+        x=x,
+        y=y,
+        text=alt.Text("range_km:Q", format=".0f"),
+        color=alt.condition(f"datum.range_km > {mid}", alt.value("#ffffff"), alt.value("#16191f")),
+    )
+    return alt.layer(cells, labels).properties(height=300)
+
+
+@styled
+def drive_log(drives: pd.DataFrame) -> alt.Chart:
+    """Every drive over time: consumption up the side, dot size for distance, colour for temperature."""
+    return (
+        alt.Chart(drives, title=alt.Title("Drive log", anchor="start"))
+        .mark_circle(opacity=0.85, stroke="#ffffff", strokeWidth=0.6)
+        .encode(
+            x=alt.X("start_local:T", title=None, axis=alt.Axis(format="%d %b", labelAngle=0)),
+            y=alt.Y("kwh_per_100km:Q", title="kWh/100 km", scale=alt.Scale(zero=False)),
+            size=alt.Size("distance_km:Q", scale=alt.Scale(range=[40, 600]), legend=None),
+            color=alt.Color(
+                "temp_c:Q",
+                title="°C",
+                scale=alt.Scale(range=["#2a78d6", "#c3c2b7", "#eb6834"], domainMid=10),
+                legend=alt.Legend(title="Outside °C"),
+            ),
+            tooltip=[
+                _tip("start_local:T"),
+                _tip("distance_km:Q", "km"),
+                _tip("kwh_per_100km:Q", "kWh/100 km"),
+                _tip("temp_c:Q", "°C"),
+                _tip("wind_kph:Q", "Wind km/h"),
+                _tip("speed_kph:Q", "Avg km/h"),
+            ],
+        )
+        .properties(height=320)
+    )
+
+
+@styled
 def bar_with_interval(
     df: pd.DataFrame, x: str, y: str, lo: str, hi: str, title: str, y_title: str
 ) -> alt.LayerChart:

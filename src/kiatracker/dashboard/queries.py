@@ -244,3 +244,42 @@ def costs(con, period: Period, assume: CostAssumptions) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(rows, columns=columns)
+
+
+# (factor, column, harder condition, its label, easier condition, its label)
+CONDITIONS = [
+    ("Cold", "temp_c", lambda v: v < 5, "below 5 °C", lambda v: v >= 10, "10 °C or warmer"),
+    ("Wind", "wind_kph", lambda v: v >= 20, "20 km/h or more", lambda v: v < 10, "under 10 km/h"),
+    ("Motorway speed", "speed_kph", lambda v: v >= 70, "average 70 km/h+", lambda v: v < 50, "under 50 km/h"),
+    ("Short trips", "distance_km", lambda v: v < 10, "5-10 km", lambda v: v >= 30, "30 km or longer"),
+]
+MIN_PER_SIDE = 3
+
+
+def condition_effects(con, period: Period) -> pd.DataFrame:
+    """How much more energy per km harder conditions took than easier ones, straight from the drives."""
+    d = drives(con, period)
+    d = d[d["kwh_per_100km"].notna()]
+    rows = []
+    for factor, column, harder, harder_label, easier, easier_label in CONDITIONS:
+        values = d[column]
+        hard, easy = d[values.notna() & harder(values)], d[values.notna() & easier(values)]
+        hard_kwh = consumption(hard["energy_kwh"], hard["distance_km"])
+        easy_kwh = consumption(easy["energy_kwh"], easy["distance_km"])
+        enough = len(hard) >= MIN_PER_SIDE and len(easy) >= MIN_PER_SIDE
+        diff = hard_kwh - easy_kwh if hard_kwh is not None and easy_kwh is not None else None
+        rows.append(
+            {
+                "factor": factor,
+                "harder_label": harder_label,
+                "easier_label": easier_label,
+                "harder_kwh": hard_kwh,
+                "easier_kwh": easy_kwh,
+                "diff_kwh": diff,
+                "pct": diff / easy_kwh if diff is not None and easy_kwh else None,
+                "n_harder": len(hard),
+                "n_easier": len(easy),
+                "enough": enough,
+            }
+        )
+    return pd.DataFrame(rows)

@@ -175,3 +175,43 @@ def test_trend_line_has_a_gradient_area_under_it():
     spec = charts.line(DF, "week:T", "cons:Q", "t", "kWh").to_dict()
     area = next(layer for layer in spec["layer"] if layer["mark"]["type"] == "area")
     assert area["mark"]["color"]["gradient"] == "linear"
+
+
+EFFECTS = pd.DataFrame(
+    {
+        "factor": ["Cold", "Wind"],
+        "harder_label": ["below 5 °C", "20 km/h+"],
+        "easier_label": ["10 °C+", "under 10"],
+        "harder_kwh": [18.0, 16.0],
+        "easier_kwh": [15.0, 15.5],
+        "diff_kwh": [3.0, 0.5],
+        "pct": [0.2, 0.03],
+        "n_harder": [5, 2],
+        "n_easier": [6, 4],
+        "enough": [True, False],
+    }
+)
+
+
+def test_effect_bars_grey_out_factors_without_enough_drives():
+    spec = charts.effect_bars(EFFECTS).to_dict()
+    bars = spec["layer"][0]
+    assert bars["mark"]["type"] == "bar" and "tooltip" in bars["encoding"]
+    assert bars["encoding"]["color"]["condition"]["value"] == charts.ORANGE  # enough data: brand accent
+    assert spec["config"]["font"] == "Inter"
+
+
+def test_range_heatmap_labels_every_cell_in_km():
+    grid = pd.DataFrame(
+        {"temp_c": [-10, -10, 20, 20], "wind_kph": [0, 30, 0, 30], "range_km": [300, 280, 420, 400]}
+    )
+    spec = charts.range_heatmap(grid, "Range on a full battery at 80 km/h").to_dict()
+    cells, labels = spec["layer"]
+    assert cells["mark"]["type"] == "rect" and labels["mark"]["type"] == "text"
+    assert cells["encoding"]["color"]["field"] == "range_km"
+
+
+def test_drive_log_puts_each_drive_on_a_timeline():
+    enc = charts.drive_log(DRIVES).to_dict()["encoding"]
+    assert enc["x"]["field"] == "start_local" and enc["y"]["field"] == "kwh_per_100km"
+    assert enc["size"]["field"] == "distance_km" and enc["color"]["field"] == "temp_c"

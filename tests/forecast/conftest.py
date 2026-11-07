@@ -13,3 +13,14 @@ def demo_db(tmp_path_factory):
 def demo(demo_db):
     with connect(demo_db) as con:
         yield con
+
+
+@pytest.fixture
+def empty(tmp_path):
+    from kiatracker.config import Settings
+    from kiatracker.db import build_database
+
+    settings = Settings(None, None, tmp_path, home=None)
+    build_database(settings)
+    with connect(settings.db_path) as con:
+        yield con

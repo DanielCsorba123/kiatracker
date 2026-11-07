@@ -133,3 +133,19 @@ def test_drives_have_average_speed(demo, all_time):
 def test_bands_carry_numeric_edges_for_drawing(demo, all_time):
     bands = q.consumption_by_band(demo, all_time, "temp_c", [-30, 0, 10, 45])
     assert list(bands["lo"]) == [-30, 0, 10] and list(bands["hi"]) == [0, 10, 45]
+
+
+def test_condition_effects_compare_harder_and_easier_drives(demo, all_time):
+    effects = q.condition_effects(demo, all_time).set_index("factor")
+    cold = effects.loc["Cold"]
+    assert cold["harder_label"] == "below 5 °C" and cold["easier_label"] == "10 °C or warmer"
+    assert cold["enough"] and cold["n_harder"] >= 3 and cold["n_easier"] >= 3
+    assert cold["diff_kwh"] == pytest.approx(cold["harder_kwh"] - cold["easier_kwh"])
+    assert cold["diff_kwh"] > 0  # the simulator's car does use more in the cold
+    assert set(effects.index) == {"Cold", "Wind", "Motorway speed", "Short trips"}
+
+
+def test_condition_effects_say_when_there_is_not_enough_data(tiny):
+    with tiny() as con:
+        effects = q.condition_effects(con, Period(date(2026, 11, 1), date(2026, 11, 30)))
+    assert not effects["enough"].any()
