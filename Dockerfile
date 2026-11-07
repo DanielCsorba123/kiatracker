@@ -13,6 +13,7 @@ COPY .streamlit ./.streamlit
 RUN uv sync --frozen --no-dev --extra dashboard
 
 ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
     KIATRACKER_DATA_DIR=/data
 VOLUME /data
 EXPOSE 8501

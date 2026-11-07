@@ -10,6 +10,8 @@ services:
     build: .
     image: kiatracker
     command: ["scheduler"]
+    environment:
+      TZ: Europe/Budapest # log times in local time; stored data stays in UTC
     env_file:
       - path: .env # PLEOS_API_KEY_CLIENT_ID / _SECRET, optional KIATRACKER_HOME_LAT / _LON
         required: false
@@ -24,6 +26,7 @@ services:
     command: ["dashboard", "--address", "0.0.0.0"]
     environment:
       KIATRACKER_IN_CONTAINER: "1"
+      TZ: Europe/Budapest
     volumes:
       - ./data:/data:ro # read-only: the collector and `kiatracker build` keep running on the host
     ports:
