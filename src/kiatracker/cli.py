@@ -25,6 +25,7 @@ from kiatracker.forecast.outlook import LOCAL, daily_outlook, fetch_forecast, la
 from kiatracker.forecast.train import DEFAULT_SPEED, MODEL_FILE, car_state, train, weather_cell
 from kiatracker.pleos import PleosClient, PleosError
 from kiatracker.prices import download_oil_bulletin, fuel_is_stale, parse_oil_bulletin, store_fuel_prices
+from kiatracker.schedule import Job, run_jobs
 from kiatracker.synthetic import FAKE_HOME, generate
 from kiatracker.weather import fetch_weather
 
@@ -112,6 +113,23 @@ def cmd_refresh(settings: Settings, args) -> int:
             return 0
     trained.model.save(settings.data_dir / MODEL_FILE)
     print(f"Range model trained on {trained.model.n_drives} drives")
+    return 0
+
+
+def cmd_scheduler(settings: Settings, args) -> int:
+    """Long-running loop for the container: collect every 5 minutes, refresh hourly (after the first poll)."""
+    print("Scheduler started: collect every 5 min, refresh every hour", flush=True)
+    run_jobs(
+        [
+            Job("collect", timedelta(minutes=5), lambda: cmd_collect(settings, args)),
+            Job(
+                "refresh",
+                timedelta(hours=1),
+                lambda: cmd_refresh(settings, args),
+                first_delay=timedelta(minutes=2),
+            ),
+        ]
+    )
     return 0
 
 
@@ -238,6 +256,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("build", help="rebuild the database from raw files")
     sub.add_parser("weather", help="fetch missing weather for drives, then rebuild")
     sub.add_parser("refresh", help="weather, forecast, rebuild and retrain in one go (schedule hourly)")
+    sub.add_parser("scheduler", help="run collect every 5 min and refresh hourly until stopped (for Docker)")
     demo = sub.add_parser("demo", help="generate fake data into <data-dir>/demo and build it")
     demo.add_argument("--days", type=int, default=30)
     sub.add_parser("stats", help="print a summary without coordinates")
@@ -271,5 +290,6 @@ def main(argv: list[str] | None = None) -> int:
         "train": cmd_train,
         "forecast": cmd_forecast,
         "refresh": cmd_refresh,
+        "scheduler": cmd_scheduler,
     }
     return commands[args.command](settings, args)

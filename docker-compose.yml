@@ -1,3 +1,4 @@
+# docker compose --profile collector up -d  collect every 5 min + hourly refresh (needs .env with the Pleos key)
 # docker compose up -d dashboard            your data at http://127.0.0.1:8501
 # docker compose --profile demo up -d demo  generated demo data at http://127.0.0.1:8502
 #
@@ -5,6 +6,18 @@
 # Streamlit has to listen on 0.0.0.0; KIATRACKER_IN_CONTAINER=1 tells the app that this mapping is what
 # keeps it local. Don't change the ports to "8501:8501" while showing personal data.
 services:
+  collector:
+    build: .
+    image: kiatracker
+    command: ["scheduler"]
+    env_file:
+      - path: .env # PLEOS_API_KEY_CLIENT_ID / _SECRET, optional KIATRACKER_HOME_LAT / _LON
+        required: false
+    volumes:
+      - ./data:/data # raw files, database and models; the only state, back it up
+    restart: unless-stopped
+    profiles: ["collector"]
+
   dashboard:
     build: .
     image: kiatracker

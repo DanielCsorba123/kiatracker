@@ -93,7 +93,18 @@ uv run kiatracker stats
 uv run kiatracker dashboard # your own data, on this computer only
 ```
 
-On Windows, Task Scheduler runs `.venv\Scripts\pythonw.exe -m kiatracker collect` with **Start in** set to the project folder, since `.env` and `data/` are found relative to it (output goes to `data/logs/`). On a Raspberry Pi, build the Docker image and use the systemd timer in [deploy/](deploy/).
+**Always on, on a Raspberry Pi (or any Docker host):**
+
+```bash
+git clone https://github.com/DanielCsorba123/kiatracker.git && cd kiatracker
+cp .env.example .env    # add the Pleos key
+docker compose --profile collector up -d collector dashboard
+docker compose logs -f collector
+```
+
+`kiatracker scheduler` inside the container collects every 5 minutes and refreshes hourly; `restart: unless-stopped` brings it back after a reboot. Everything lives in `data/`, so moving machines means copying that folder.
+
+On a Windows PC instead, Task Scheduler can run `.venv\Scripts\pythonw.exe -m kiatracker collect` every 5 minutes and `... refresh` hourly, with **Start in** set to the project folder (output goes to `data/logs/`).
 
 ## Run the dashboard in Docker
 

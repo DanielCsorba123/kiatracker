@@ -112,3 +112,15 @@ def test_refresh_with_too_little_data_still_succeeds(tmp_path, capsys, monkeypat
     monkeypatch.setattr(cli, "fetch_forecast", lambda *a, **k: None)
     assert main(["--data-dir", str(tmp_path), "refresh"]) == 0
     assert "need 15 more drives" in capsys.readouterr().out
+
+
+def test_scheduler_runs_collect_every_5_minutes_and_refresh_hourly(tmp_path, monkeypatch):
+    from datetime import timedelta
+
+    from kiatracker import cli
+
+    seen = {}
+    monkeypatch.setattr(cli, "run_jobs", lambda jobs: seen.update({j.name: j for j in jobs}))
+    assert main(["--data-dir", str(tmp_path), "scheduler"]) == 0
+    assert seen["collect"].every == timedelta(minutes=5) and seen["collect"].first_delay == timedelta(0)
+    assert seen["refresh"].every == timedelta(hours=1) and seen["refresh"].first_delay > timedelta(0)
