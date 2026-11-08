@@ -12,7 +12,8 @@ def test_folds_never_train_on_the_future(demo):
 
 def test_model_beats_both_baselines_on_demo(demo):
     result = backtest(drive_features(demo))
-    assert result["model"]["mae"] < result["temperature_only"]["mae"] < result["mean"]["mae"]
+    # the references' order depends on the season the demo dates fall in; the model must beat both
+    assert result["model"]["mae"] < min(result["temperature_only"]["mae"], result["mean"]["mae"])
     assert len(result["predictions"]) == len(result["residuals"]) > 50
     p = result["predictions"][0]
     assert set(p) == {"start_ts", "actual", "predicted"}

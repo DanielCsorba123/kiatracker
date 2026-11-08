@@ -18,6 +18,7 @@ from kiatracker.model import LocationReading
 from kiatracker.privacy import haversine_km
 
 MIN_KM = 0.05  # GPS jitter while standing still is not a stretch
+MIN_SECONDS = 30  # two readings closer than this give no usable speed
 
 
 @dataclass(frozen=True)
@@ -97,7 +98,7 @@ def drive_segments(drive: Drive, inner: list[LocationReading], weather: dict, te
                 start_ts=t0,
                 end_ts=t1,
                 km=km,
-                speed_kph=km / hours if hours > 0 else average_speed,
+                speed_kph=km / hours if hours * 3600 >= MIN_SECONDS else average_speed,
                 bearing_deg=bearing,
                 temp_c=w.get("temp"),
                 wind_kph=w.get("wind"),

@@ -131,11 +131,12 @@ def replace_when_free(src: Path, dst: Path) -> None:
     raise RuntimeError(f"{dst} is in use by another program; the new build is left in {src}")
 
 
-def build_database(settings: Settings) -> dict[str, int]:
+def build_database(settings: Settings, terrain=None) -> dict[str, int]:
+    """Rebuild every table from raw files. `terrain` defaults to the SRTM tiles in the data folder."""
     r, drives, sessions, windows = derive_all(settings)
     weather = load_weather(settings.raw_dir)
     drive_weather = [w for d in drives if (w := weather_for_drive(d, weather))]
-    segments = all_segments(drives, r.location, weather, Terrain(settings.dem_dir, download=None))
+    segments = all_segments(drives, r.location, weather, terrain or Terrain(settings.dem_dir, download=None))
 
     tables = [
         ("readings_battery", BatteryReading, r.battery),

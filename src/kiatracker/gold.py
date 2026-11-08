@@ -133,7 +133,7 @@ def split_by_trips(start, run, end, api_trips):
     Yields (start reading, first moving reading, last reading, end reading or None while driving, trips).
     """
     last = end or run[-1]
-    trips = [t for t in api_trips if start.ts < t.start <= last.ts]
+    trips = [t for t in api_trips if start.ts <= t.start <= last.ts]  # may start at the last parked reading
     if len(trips) < 2:
         yield start, run[0], last, end, trips
         return

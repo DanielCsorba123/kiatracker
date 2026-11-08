@@ -14,7 +14,7 @@ from pathlib import Path
 
 from kiatracker.config import Settings
 from kiatracker.db import build_database
-from kiatracker.synthetic import FAKE_HOME, generate
+from kiatracker.synthetic import FAKE_HOME, FakeTerrain, generate
 
 DEMO_ENV = "KIATRACKER_DEMO"
 PERSONAL_ENV = "KIATRACKER_PERSONAL"
@@ -50,11 +50,11 @@ def may_show_personal(address: str | None, environ: Mapping[str, str] = os.envir
     return is_local_only(address) or environ.get(CONTAINER_ENV) == "1"
 
 
-def build_demo_database(target_dir: Path | None = None, days: int = 60, seed: int = 7) -> Path:
+def build_demo_database(target_dir: Path | None = None, days: int = 365, seed: int = 7) -> Path:
     """Generate fake raw data ending yesterday and build it, by default in a new private temp folder."""
     target_dir = target_dir or Path(tempfile.mkdtemp(prefix="kiatracker-demo-"))
     settings = Settings(None, None, target_dir, home=FAKE_HOME, home_radius_km=0.3)
     start = datetime.combine(date.today() - timedelta(days=days), datetime.min.time(), UTC)
     generate(settings.raw_dir, start, days, seed)
-    build_database(settings)
+    build_database(settings, FakeTerrain())
     return settings.db_path

@@ -1,10 +1,12 @@
 """Fake raw data in the exact format the collector writes, so the public repo runs without a car or account.
 
-The simulated car lives at a fictional home and makes one or two round trips a day. Its consumption follows
-the range model's physics with known true coefficients (TRUTH), using the same hourly weather it writes and
-the real bearing of each drive against the day's wind, so fitting the model must recover TRUTH. Readings
-follow how the real car reports: every poll while driving, once when the ignition goes off, and every
-15 minutes while charging.
+A simulated EV3 lives at a fictional home through the seasons: weekday commutes and errands, longer weekend
+outings, a motorway road trip about once a month with fast-charging stops, and overnight charging at home. The
+land around home is hilly (`fake_elevation`). Energy is charged step by step (one 5-minute poll at a time)
+with that step's hour of weather, the headwind along the drive and the step's climb or descent, following the
+range model's physics with known true coefficients (TRUTH). Fitting the model must recover them. Readings
+follow how the real car reports: every poll while driving, once when the ignition goes off, and every 15 (AC)
+or 5 (DC) minutes while charging.
 """
 
 import math
@@ -14,19 +16,26 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from kiatracker.geo import bearing_deg, headwind_kph
+from kiatracker.privacy import haversine_km
 from kiatracker.raw import append_record, append_records
 
 FAKE_HOME = (47.0, 18.0)  # a field in rural Hungary, not anyone's home
-DESTINATIONS = [(0.08, 0.12), (-0.05, 0.2), (0.15, -0.1), (0.02, 0.04)]  # offsets in degrees
+WORK = (0.13, 0.17)  # offsets in degrees from home
+ERRANDS = [(0.03, 0.05), (-0.04, 0.03), (0.05, -0.06), (0.02, -0.03)]
+OUTINGS = [(0.32, -0.22), (-0.28, 0.36), (0.2, 0.42), (-0.35, -0.3)]
+ROAD_TRIPS = [(1.2, -1.6), (-0.4, 2.1), (1.5, 0.9)]  # 150-230 km away
 CAPACITY_KJ = 293040.0
 CAPACITY_KWH = CAPACITY_KJ / 3600
 POLL = timedelta(minutes=5)
-CHARGE_KW = 7.4
-WEATHER_CELLS = 2  # cells each side of home: drive midpoints stay within 0.2 degrees
+AC_KW = 11.0
+DC_KW = 120.0
 FORECAST_DAYS = 3
-TRUTH = {"c0": 10.0, "c_aero": 0.0011, "c_heat": 12.0}  # kWh/100 km = c0 + c_aero*(v+h)^2 + c_heat*heat
+# true physics: kWh/100 km = c0 + c_aero*(v+h)^2*density + c_heat*heat,
+# plus c_climb kWh per metre climbed and c_regen kWh back per metre descended
+TRUTH = {"c0": 7.5, "c_aero": 0.00105, "c_heat": 13.0, "c_climb": 0.0062, "c_regen": 0.0030}
 T_BASE = 18.0
 NOISE_KWH_100KM = 0.6
+ROAD_FACTOR = 1.25  # roads are longer than the straight line
 
 
 @dataclass(frozen=True)
@@ -37,7 +46,7 @@ class DayWeather:
 
     def at(self, hour: int) -> tuple[float, float]:
         """Temperature and wind speed in a given UTC hour, rounded as the weather records store them."""
-        temp = round(self.temp + 3 * math.sin((hour - 9) / 24 * 2 * math.pi), 1)
+        temp = round(self.temp + 3.5 * math.sin((hour - 9) / 24 * 2 * math.pi), 1)
         return temp, round(self.wind * (0.8 + 0.4 * math.sin(hour / 5)), 1)
 
     def hourly(self, day: str) -> dict:
@@ -51,6 +60,19 @@ class DayWeather:
         }
 
 
+def fake_elevation(lat: float, lon: float) -> float:
+    """Rolling hills around the fake home: about ±150 m over 15-25 km, never below 100 m."""
+    x, y = (lat - FAKE_HOME[0]) * 111.0, (lon - FAKE_HOME[1]) * 76.0  # km north and east
+    return 260 + 90 * math.sin(x / 6.0) * math.cos(y / 8.0) + 60 * math.sin((x + y) / 15.0)
+
+
+class FakeTerrain:
+    """Stands in for the SRTM tiles when building demo data."""
+
+    def elevation(self, lat: float, lon: float) -> float:
+        return fake_elevation(lat, lon)
+
+
 def true_consumption(speed: float, headwind: float, temp: float) -> float:
     heat = max(0.0, T_BASE - temp) / speed
     density = 288.15 / (273.15 + temp)  # cold air is denser, as in the model's features
@@ -61,18 +83,20 @@ def iso(ts: datetime) -> str:
     return ts.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def at_offset(offset: tuple[float, float]) -> tuple[float, float]:
+    return FAKE_HOME[0] + offset[0], FAKE_HOME[1] + offset[1]
+
+
 class Car:
     def __init__(self, start: datetime):
-        self.out: dict[str, list] = {
-            "snapshots": [],
-            "trips": [],
-            "weather": [],
-            "forecast": [],
-        }  # written in one go at the end
+        self.out: dict[str, list] = {"snapshots": [], "trips": [], "weather": [], "forecast": []}
+        self.cells: dict[str, set] = {}  # UTC day -> 0.1 degree cells the car was in
         self.odo, self.soc, self.pos = 10000.0, 80.0, FAKE_HOME
         self.report(start, ignition_on=False, charging=False, temp=5.0)
 
     def report(self, ts: datetime, ignition_on: bool, charging: bool, temp: float, speed: float = 0.0):
+        day = ts.astimezone(UTC).date().isoformat()
+        self.cells.setdefault(day, set()).add((round(self.pos[0], 1), round(self.pos[1], 1)))
         groups = {
             "batteries": {
                 "charge": {
@@ -106,8 +130,8 @@ class Car:
             },
             "status": {
                 "climateControl": {"mode": "auto", "status": "on" if ignition_on and temp < 12 else "off"},
-                "windshield": {"defrost": "off"},
-                "steeringWheelHeat": "off",
+                "windshield": {"defrost": "on" if ignition_on and temp < 1 else "off"},
+                "steeringWheelHeat": "on" if ignition_on and temp < 5 else "off",
                 "seats": [],
             },
         }
@@ -121,19 +145,28 @@ class Car:
             }
             self.out["snapshots"].append((fetched, record))
 
-    def drive(self, start: datetime, to: tuple[float, float], km: float, weather, rng) -> datetime:
-        speed = rng.uniform(35, 70)
-        end = start + timedelta(minutes=km / speed * 60)
-        temp, wind, wind_from = weather(start + (end - start) / 2)  # the hour the model will look up
-        headwind = headwind_kph(wind, wind_from, bearing_deg(self.pos, to)) if self.pos != to else 0.0
-        kwh_per_km = (true_consumption(speed, headwind, temp) + rng.gauss(0, NOISE_KWH_100KM)) / 100
-        origin, odo0, soc0 = self.pos, self.odo, self.soc
+    def drive(
+        self, start: datetime, to: tuple[float, float], km: float, weather, rng, speed: float
+    ) -> datetime:
+        """Drive in a straight line to `to`, `km` by the odometer, charging energy one poll step at a time."""
+        end = start + timedelta(hours=km / speed)
+        noise = rng.gauss(0, NOISE_KWH_100KM)
+        bearing = bearing_deg(self.pos, to) if self.pos != to else None
+        origin, odo0 = self.pos, self.odo
+        previous, done_before = start, 0.0
         t = start + POLL
         while True:
-            done = min(1.0, (t - start) / (end - start))
-            self.odo = odo0 + km * done
-            self.soc = soc0 - km * done * kwh_per_km / CAPACITY_KWH * 100
-            self.pos = (origin[0] + (to[0] - origin[0]) * done, origin[1] + (to[1] - origin[1]) * done)
+            step_end = min(t, end)
+            done = (step_end - start) / (end - start)
+            temp, wind, wind_from = weather(previous + (step_end - previous) / 2)
+            head = headwind_kph(wind, wind_from, bearing) if bearing is not None else 0.0
+            pos = (origin[0] + (to[0] - origin[0]) * done, origin[1] + (to[1] - origin[1]) * done)
+            rise = fake_elevation(*pos) - fake_elevation(*self.pos)
+            kwh = km * (done - done_before) * (true_consumption(speed, head, temp) + noise) / 100
+            kwh += TRUTH["c_climb"] * max(rise, 0.0) - TRUTH["c_regen"] * max(-rise, 0.0)
+            self.soc -= kwh / CAPACITY_KWH * 100
+            self.odo, self.pos = odo0 + km * done, pos
+            previous, done_before = step_end, done
             if done >= 1:
                 self.report(end, ignition_on=False, charging=False, temp=temp)
                 return end
@@ -142,33 +175,30 @@ class Car:
             if end - t < timedelta(minutes=1):  # the car never sends two readings within the same second
                 t = end
 
-    def charge(self, start: datetime, temp: float, limit: float) -> datetime:
-        t = start
+    def charge(self, start: datetime, temp: float, limit: float, kw: float = AC_KW) -> datetime:
+        """AC at home (a report every 15 min), or DC on the road (every 5 min, slowing above 80 %)."""
+        t, step = start, timedelta(minutes=15 if kw <= AC_KW else 5)
         while self.soc < limit:
             self.report(t, ignition_on=False, charging=True, temp=temp)
-            t += timedelta(minutes=15)
-            self.soc = min(limit, self.soc + CHARGE_KW * 0.25 / CAPACITY_KWH * 100)
+            power = kw if kw <= AC_KW or self.soc < 80 else kw * 0.35
+            t += step
+            self.soc = min(limit, self.soc + power * step.total_seconds() / 3600 / CAPACITY_KWH * 100)
         self.report(t, ignition_on=False, charging=False, temp=temp)
         return t
 
 
-def cells() -> list[dict]:
-    return [
-        {"lat": round(FAKE_HOME[0] + i / 10, 1), "lon": round(FAKE_HOME[1] + j / 10, 1)}
-        for i in range(-WEATHER_CELLS, WEATHER_CELLS + 1)
-        for j in range(-WEATHER_CELLS, WEATHER_CELLS + 1)
-    ]
+def neighbours(cell: tuple[float, float]) -> set[tuple[float, float]]:
+    return {(round(cell[0] + i / 10, 1), round(cell[1] + j / 10, 1)) for i in (-1, 0, 1) for j in (-1, 0, 1)}
 
 
-def write_weather(out: dict, midnight: datetime, weather: DayWeather) -> None:
-    """Open-Meteo-shaped hourly weather for every 0.1 degree cell around the fake home, as the weather
-    command would have cached it."""
+def write_weather(out: dict, midnight: datetime, weather: DayWeather, cells: set) -> None:
+    """Open-Meteo-shaped hourly weather for the cells the car used, as the refresh would have cached it."""
     day = midnight.date().isoformat()
-    for cell in cells():
+    for lat, lon in sorted(cells):
         record = {
             "fetched_at": midnight.isoformat(),
             "endpoint": "open-meteo",
-            "key": {**cell, "date": day},
+            "key": {"lat": lat, "lon": lon, "date": day},
             "http_status": 200,
             "body": {"hourly": weather.hourly(day)},
         }
@@ -196,7 +226,7 @@ def write_fuel_prices(raw_dir: Path, start: datetime, days: int) -> None:
     weeks = []
     monday = start - timedelta(days=start.weekday())
     for n in range(days // 7 + 2):
-        wobble = 0.03 * math.sin(n / 2)
+        wobble = 0.03 * math.sin(n / 2) + 0.05 * math.sin(n / 9)
         huf_per_eur = 367.0
         hu_petrol, hu_diesel = 1.75 + wobble, 1.93 + wobble
         weeks.append(
@@ -217,41 +247,118 @@ def write_fuel_prices(raw_dir: Path, start: datetime, days: int) -> None:
     )
 
 
+def make_climate(start: datetime, days: int, rng: random.Random) -> list[DayWeather]:
+    """Seasons by calendar date (about 0 °C mid-January, 22 °C mid-July), multi-day fronts, and a prevailing
+    north-westerly that turns round now and then."""
+    climate, front = [], 0.0
+    for d in range(days):
+        date = (start + timedelta(days=d)).date()
+        season = 11 - 11 * math.cos(2 * math.pi * (date.timetuple().tm_yday - 15) / 365)
+        front = 0.75 * front + rng.gauss(0, 2.2)
+        windy = 1.25 if date.month in (11, 12, 1, 2, 3) else 1.0
+        wind_from = rng.gauss(315, 40) % 360 if rng.random() < 0.6 else rng.uniform(0, 360)
+        climate.append(DayWeather(season + front, rng.uniform(4, 28) * windy, wind_from))
+    return climate
+
+
+def plan_day(day: datetime, rng: random.Random, road_trip: bool) -> list[tuple]:
+    """Legs for one day: (destination, km by road, speed, minutes parked afterwards, kind)."""
+
+    def leg(offset, speed_range, stay, kind, km=None):
+        place = at_offset(offset)
+        return place, km, rng.uniform(*speed_range), stay, kind
+
+    if road_trip:
+        return [leg(rng.choice(ROAD_TRIPS), (105, 125), 0, "road trip")]
+    if day.weekday() < 5:
+        legs = [leg(WORK, (45, 95), rng.uniform(450, 540), "commute")]
+        if rng.random() < 0.35:
+            legs.append(leg(rng.choice(ERRANDS), (25, 60), rng.uniform(15, 60), "errand"))
+        legs.append(leg((0, 0), (45, 95), 0, "commute"))
+        return legs
+    legs = []
+    if rng.random() < 0.6:
+        legs += [
+            leg(rng.choice(OUTINGS), (50, 110), rng.uniform(90, 300), "outing"),
+            leg((0, 0), (50, 110), 0, "outing"),
+        ]
+    if rng.random() < 0.5:
+        legs += [
+            leg(rng.choice(ERRANDS), (25, 60), rng.uniform(20, 90), "errand"),
+            leg((0, 0), (25, 60), 0, "errand"),
+        ]
+    return legs
+
+
 def generate(raw_dir: Path, start: datetime, days: int, seed: int = 7) -> list[dict]:
     """Write fake raw files; return the true drives (start, end, distance_km) to test the pipeline with."""
     rng = random.Random(seed)
-    climate = [
-        DayWeather(4 + 8 * math.sin(d / 6) + rng.uniform(-3, 3), rng.uniform(5, 35), rng.uniform(0, 360))
-        for d in range(days + FORECAST_DAYS)
-    ]
+    climate = make_climate(start, days + FORECAST_DAYS, rng)
 
     def weather(ts: datetime) -> tuple[float, float, float]:
         """Temperature, wind and direction at the hour nearest ts, exactly as the model will see them."""
-        day = min((ts - start).days, len(climate) - 1)
+        day = min(max((ts - start).days, 0), len(climate) - 1)
         hours = (ts - (start + timedelta(days=day))).total_seconds() / 3600
         temp, wind = climate[day].at(min(23, round(hours)))
         return temp, wind, climate[day].wind_from
 
     car = Car(start)
     truth: list[dict] = []
-    busy_until = start  # the car can't leave before the last charge or drive has finished
+    trips_by_day: dict[int, list] = {}
+
+    def drive(t, to, km, speed):
+        end = car.drive(t, to, km, weather, rng, speed)
+        truth.append({"start": t.isoformat(), "end": end.isoformat(), "distance_km": km})
+        trips_by_day.setdefault((t - start).days, []).append((t, end))
+        return end
+
+    def road_km(a, b):
+        return round(haversine_km(a, b) * ROAD_FACTOR + rng.uniform(0.5, 3), 1)
+
+    def long_drive(t, to, speed):
+        """Motorway in stages of ~100 km, with a fast charge whenever the battery gets low."""
+        origin, total = car.pos, haversine_km(car.pos, to)
+        stages = max(1, round(total * ROAD_FACTOR / 100))
+        for n in range(1, stages + 1):
+            target = (
+                origin[0] + (to[0] - origin[0]) * n / stages,
+                origin[1] + (to[1] - origin[1]) * n / stages,
+            )
+            t = drive(t, target, road_km(car.pos, target), speed * rng.uniform(0.95, 1.03))
+            if n < stages:
+                t += timedelta(minutes=rng.uniform(8, 20))
+                if car.soc < 60 and rng.random() < 0.8:  # top up during the break
+                    t = car.charge(t, weather(t)[0], limit=rng.choice([75, 80, 85]), kw=DC_KW)
+                    t += timedelta(minutes=rng.uniform(2, 10))
+        return t
+
+    busy_until = start
+    away_until = -1  # last day of a road trip
     for day in range(days):
         midnight = start + timedelta(days=day)
-        write_weather(car.out, midnight, climate[day])
-        t = max(midnight + timedelta(hours=7, minutes=rng.randint(0, 90)), busy_until + timedelta(minutes=10))
-        day_trips = []
-        for _ in range(rng.choice([1, 1, 2])):
-            offset = rng.choice(DESTINATIONS)
-            place = (FAKE_HOME[0] + offset[0], FAKE_HOME[1] + offset[1])
-            for target in (place, FAKE_HOME):
-                km = round(rng.uniform(3, 35), 1)
-                end = car.drive(t, target, km, weather, rng)
-                truth.append({"start": t.isoformat(), "end": end.isoformat(), "distance_km": km})
-                day_trips.append((t, end))
-                t = end + timedelta(hours=rng.uniform(0.5, 8))
-        if car.soc < rng.uniform(25, 60):  # plug in when it feels low, not at a fixed level
-            limit = rng.choice([80, 80, 90, 100])
-            busy_until = car.charge(t + timedelta(minutes=10), weather(t)[0], limit=limit)
+        t = max(
+            midnight + timedelta(hours=6, minutes=rng.randint(0, 100)), busy_until + timedelta(minutes=10)
+        )
+        trip_day = midnight.weekday() == 5 and (day // 7) % 4 == 2 and day + 1 < days
+        if day <= away_until:  # coming back from the road trip
+            if car.soc < 55:
+                t = car.charge(t, weather(t)[0], limit=90, kw=AC_KW)  # destination charger overnight
+                t += timedelta(minutes=rng.uniform(10, 40))
+            t = long_drive(t + timedelta(hours=rng.uniform(2, 4)), FAKE_HOME, rng.uniform(105, 125))
+        else:
+            if trip_day and car.soc < 90:
+                t = car.charge(t, weather(t)[0], limit=100, kw=AC_KW) + timedelta(minutes=rng.uniform(10, 40))
+            for place, km, speed, stay, kind in plan_day(midnight, rng, trip_day):
+                if kind == "road trip":
+                    t = long_drive(t, place, speed)
+                    away_until = day + 1
+                    break
+                stay = max(stay, rng.uniform(4, 25))  # a real car always stops between trips
+                t = drive(t, place, km or road_km(car.pos, place), speed) + timedelta(minutes=stay)
+        at_home = haversine_km(car.pos, FAKE_HOME) < 0.3
+        if at_home and car.soc < rng.uniform(35, 65):  # plug in when it feels low, not at a fixed level
+            evening = max(t, midnight + timedelta(hours=rng.uniform(18, 22)))
+            busy_until = car.charge(evening, weather(evening)[0], limit=rng.choice([80, 80, 90, 100]))
         else:
             busy_until = t
         fetched = midnight + timedelta(days=1)
@@ -261,7 +368,7 @@ def generate(raw_dir: Path, start: datetime, days: int, seed: int = 7) -> list[d
                 "tripLength": int((e - s).total_seconds() * 1000),
                 "isla": {},
             }
-            for s, e in day_trips
+            for s, e in trips_by_day.get(day, [])
         ]
         car.out["trips"].append(
             (
@@ -275,7 +382,13 @@ def generate(raw_dir: Path, start: datetime, days: int, seed: int = 7) -> list[d
                 },
             )
         )
-    write_weather(car.out, start + timedelta(days=days), climate[days])  # drives running past midnight
+    home_block = neighbours((round(FAKE_HOME[0], 1), round(FAKE_HOME[1], 1)))
+    for day in range(days + 1):
+        midnight = start + timedelta(days=day)
+        used = car.cells.get(midnight.date().isoformat(), set())
+        used |= car.cells.get((midnight - timedelta(days=1)).date().isoformat(), set())
+        cells = set(home_block).union(*(neighbours(c) for c in used))
+        write_weather(car.out, midnight, climate[day], cells)
     write_forecast(car.out, start + timedelta(days=days), climate[days:])
     for kind, records in car.out.items():
         append_records(raw_dir, kind, records)

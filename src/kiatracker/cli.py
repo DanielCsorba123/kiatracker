@@ -31,7 +31,7 @@ from kiatracker.prices import download_oil_bulletin, fuel_is_stale, parse_oil_bu
 from kiatracker.route_energy import Levers, PlaceNotFound, compare_routes, differences
 from kiatracker.schedule import Job, run_jobs
 from kiatracker.segments import needs
-from kiatracker.synthetic import FAKE_HOME, generate
+from kiatracker.synthetic import FAKE_HOME, FakeTerrain, generate
 from kiatracker.weather import fetch_weather
 
 
@@ -169,7 +169,7 @@ def cmd_demo(settings: Settings, args) -> int:
     start = datetime.combine(date.today() - timedelta(days=args.days), datetime.min.time(), UTC)
     truth = generate(demo.raw_dir, start, args.days)
     print(f"Generated {len(truth)} fake drives over {args.days} days in {demo.data_dir}")
-    build_database(demo)
+    build_database(demo, FakeTerrain())
     print(stats(demo))
     return 0
 

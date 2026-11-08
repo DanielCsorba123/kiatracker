@@ -27,7 +27,10 @@ def test_only_finished_measured_drives(demo):
 
 def test_derived_physics_features(demo):
     r = drive_features(demo)[0]
-    assert r["aero"] >= (r["speed_kph"] + r["headwind_kph"]) ** 2 - 1e-6  # mean of squares >= square of mean
+    airspeed_sq = (
+        r["speed_kph"] + r["headwind_kph"]
+    ) ** 2  # stretches vary, and air density with temperature
+    assert 0.8 * airspeed_sq < r["aero"] < 1.5 * airspeed_sq
     assert r["heat"] == pytest.approx(max(0.0, 18 - r["temp_c"]) / r["speed_kph"], rel=0.05)
     assert abs(r["headwind_kph"]) <= r["wind_kph"] + 1e-9
 

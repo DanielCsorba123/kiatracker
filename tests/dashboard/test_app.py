@@ -42,7 +42,7 @@ def test_without_opt_in_the_app_shows_demo(monkeypatch):
     monkeypatch.delenv("KIATRACKER_DEMO", raising=False)
     at = AppTest.from_file(APP, default_timeout=60).run()
     assert not at.exception
-    assert any("Demo data" in info.value for info in at.info)
+    assert any("simulated" in info.value for info in at.info)
     assert at.title[0].value == "Overview"
 
 
@@ -94,3 +94,12 @@ def test_range_training_fingerprint_tracks_the_data(demo_db, empty_db_path):
 
     with connect(demo_db) as a, connect(demo_db) as b, connect(empty_db_path) as c:
         assert fingerprint(a) == fingerprint(b) != fingerprint(c)
+
+
+def test_cloud_entry_point_always_shows_demo(monkeypatch):
+    monkeypatch.setenv("KIATRACKER_PERSONAL", "1")  # even if someone sets it on the host
+    monkeypatch.delenv("KIATRACKER_DEMO", raising=False)  # the entry point sets it; restored afterwards
+    entry = str(Path(APP).parent / "streamlit_app.py")
+    at = AppTest.from_file(entry, default_timeout=120).run()
+    assert not at.exception
+    assert any("simulated" in info.value for info in at.info)

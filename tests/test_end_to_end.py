@@ -31,15 +31,33 @@ def test_every_generated_drive_is_found_with_its_distance(built):
         assert found[0] == pytest.approx(expected["distance_km"], abs=0.2)
 
 
-def test_drives_start_or_end_at_home(built):
+def test_everyday_drives_start_or_end_at_home(built):
     _, _, drives, _ = built
-    assert all("home" in (start, end) for _, start, end in drives)
+    touching_home = [d for d in drives if "home" in (d[1], d[2])]
+    assert len(touching_home) >= 0.8 * len(drives)  # road-trip stages are the exception
 
 
-def test_charging_happens_at_home(built):
+def test_charging_happens_mostly_at_home(built):
     _, counts, _, sessions = built
     assert counts["charging_sessions"] >= 2 and counts["charge_windows"] >= 1
-    assert all(zone == "home" for zone, _ in sessions)
+    assert sum(zone == "home" for zone, _ in sessions) >= 0.6 * len(sessions)
+
+
+def test_a_year_has_seasons_road_trips_fast_charging_and_hills(tmp_path):
+    from kiatracker.synthetic import FakeTerrain
+
+    settings = Settings(None, None, tmp_path, home=FAKE_HOME, home_radius_km=0.3)
+    generate(settings.raw_dir, datetime(2025, 11, 1, tzinfo=UTC), days=365, seed=7)
+    build_database(settings, FakeTerrain())
+    with duckdb.connect(str(settings.db_path), read_only=True) as con:
+        coldest, warmest = con.execute("select min(temp_c), max(temp_c) from drive_weather").fetchone()
+        longest = con.execute("select max(distance_km) from drives").fetchone()[0]
+        fastest_charge = con.execute(
+            "select max(avg_kw) from charging_sessions where zone = 'other'"
+        ).fetchone()[0]
+        climb = con.execute("select sum(climb_m) from drive_segments").fetchone()[0]
+    assert coldest < 0 < 20 < warmest
+    assert longest > 80 and fastest_charge > 50 and climb > 10_000
 
 
 def test_generation_is_reproducible(tmp_path):

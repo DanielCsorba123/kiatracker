@@ -58,8 +58,9 @@ coefficient). A coefficient whose feature is always zero keeps its prior.
   calibration: percentiles from the first half of the backtest cover 81 % of the second half's drives on demo
   data (target 80 %).
 - **Known truth:** the simulator (`synthetic.py`) drives with fixed coefficients (`TRUTH`); a test checks the
-  fit recovers them within 15 %. On demo data the backtest MAE is about 1.1 kWh/100 km, against 1.9 for the
-  temperature line and 2.4 for the mean.
+  fit recovers them within 15 %. On a simulated year (seasons, road trips, hills) the fit lands within a few
+  per cent of the truth, and the backtest MAE is about 1.0 kWh/100 km, against 2.2 for the specs model, 2.9
+  for the temperature line and 3.3 for the mean.
 
 ## 4. Range outlook (Range page, `kiatracker forecast`)
 

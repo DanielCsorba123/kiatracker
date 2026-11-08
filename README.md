@@ -46,8 +46,9 @@ uv sync --extra dashboard
 uv run kiatracker dashboard --demo
 ```
 
-The dashboard opens at http://127.0.0.1:8501 on 60 days of simulated driving, charging and weather from a
-simulator with known physics. The Routes page works too: it uses the demo model on real routes you type.
+The dashboard opens at http://127.0.0.1:8501 on a year of simulated driving from a simulator with known
+physics: seasons, commutes, weekend outings, monthly motorway road trips with fast charging, and a hilly
+landscape. The Routes page works too: it uses the demo model on real routes you type.
 
 ## Set up your own tracker
 

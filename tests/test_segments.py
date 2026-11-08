@@ -81,3 +81,10 @@ def test_stretches_without_weather_or_terrain_still_count_distance():
     [only] = drive_segments(drive(), [], {}, None)
     assert only.km == pytest.approx(22.2, abs=0.1)
     assert only.temp_c is None and only.headwind_kph is None and only.climb_m is None
+
+
+def test_readings_seconds_apart_use_the_drive_speed_not_an_absurd_one():
+    inner = [LocationReading(T0 + timedelta(minutes=10, seconds=-0.1), 47.1, 18.0, 0.0, 66.0),
+             LocationReading(T0 + timedelta(minutes=10), 47.11, 18.0, 0.0, 66.0)]  # fmt: skip
+    speeds = [s.speed_kph for s in drive_segments(drive(), inner, {}, None)]
+    assert max(speeds) < 100  # 1 km in 0.1 s would be 36,000 km/h

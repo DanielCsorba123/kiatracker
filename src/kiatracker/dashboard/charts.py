@@ -73,7 +73,7 @@ def _x(field: str, title: str | None):
             field.replace(":T", ":O"),
             timeUnit="yearmonthdate",
             title=title,
-            axis=alt.Axis(format="%d %b", grid=False, labelAngle=0),
+            axis=alt.Axis(format="%d %b", grid=False, labelAngle=0, labelOverlap="greedy", labelSeparation=8),
         )
     # sort=None keeps the data's order, so bands like "5 to 10" come before "10 to 15"
     return alt.X(field, title=title, sort=None, axis=alt.Axis(grid=False, labelAngle=0))

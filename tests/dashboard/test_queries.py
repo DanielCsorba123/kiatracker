@@ -52,7 +52,8 @@ def test_cold_costs_more_in_demo(demo, all_time):
 
 def test_charging_tables(demo, all_time):
     sessions = q.charging_sessions(demo, all_time)
-    assert (sessions["zone"] == "home").all() and (sessions["soc_end"] > sessions["soc_start"]).all()
+    assert (sessions["soc_end"] > sessions["soc_start"]).all()
+    assert set(sessions["zone"]) <= {"home", "other"} and (sessions["zone"] == "home").mean() > 0.6
     assert q.weekly_charging(demo, all_time)["energy_kwh"].sum() == pytest.approx(
         q.kpis(demo, all_time)["energy_charged_kwh"]
     )
@@ -113,9 +114,16 @@ def test_no_fuel_prices_yet_gives_no_costs(empty, all_time):
     assert q.costs(empty, all_time, q.CostAssumptions()).empty
 
 
+def middle_edges(demo, all_time) -> tuple[int, int]:
+    """Two whole-degree edges with drives on every side, whatever season the demo's dates fall in."""
+    temps = q.drives(demo, all_time)["temp_c"].dropna()
+    return round(temps.quantile(0.3)), round(temps.quantile(0.7))
+
+
 def test_middle_bands_show_both_edges(demo, all_time):
-    bands = q.consumption_by_band(demo, all_time, "temp_c", [-30, 0, 10, 45])
-    assert list(bands["band"]) == ["under 0", "0 to 10", "10+"]
+    a, b = middle_edges(demo, all_time)
+    bands = q.consumption_by_band(demo, all_time, "temp_c", [-30, a, b, 45])
+    assert list(bands["band"]) == [f"under {a}", f"{a} to {b}", f"{b}+"]
 
 
 def test_unfinished_drive_is_not_shown_or_counted(tiny):
@@ -131,8 +139,9 @@ def test_drives_have_average_speed(demo, all_time):
 
 
 def test_bands_carry_numeric_edges_for_drawing(demo, all_time):
-    bands = q.consumption_by_band(demo, all_time, "temp_c", [-30, 0, 10, 45])
-    assert list(bands["lo"]) == [-30, 0, 10] and list(bands["hi"]) == [0, 10, 45]
+    a, b = middle_edges(demo, all_time)
+    bands = q.consumption_by_band(demo, all_time, "temp_c", [-30, a, b, 45])
+    assert list(bands["lo"]) == [-30, a, b] and list(bands["hi"]) == [a, b, 45]
 
 
 def test_condition_effects_compare_harder_and_easier_drives(demo, all_time):
