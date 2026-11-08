@@ -19,6 +19,11 @@ dashboard = [
     "pandas>=2.2",
     "streamlit>=1.50",
 ]
+notebook = [
+    "kiatracker[dashboard]",
+    "jupyterlab>=4",
+    "matplotlib>=3.9",
+]
 
 [project.scripts]
 kiatracker = "kiatracker.cli:main"
