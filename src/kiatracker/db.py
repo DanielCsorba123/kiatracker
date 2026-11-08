@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 import duckdb
 
 from kiatracker.config import Settings
+from kiatracker.elevation import Terrain
 from kiatracker.forecast.outlook import latest_forecast
 from kiatracker.gold import (
     ChargeWindow,
@@ -36,6 +37,7 @@ from kiatracker.model import (
     StatusReading,
 )
 from kiatracker.prices import load_fuel_prices
+from kiatracker.segments import Segment, all_segments
 from kiatracker.silver import load_readings
 from kiatracker.weather import DriveWeather, load_weather, weather_for_drive
 
@@ -133,6 +135,7 @@ def build_database(settings: Settings) -> dict[str, int]:
     r, drives, sessions, windows = derive_all(settings)
     weather = load_weather(settings.raw_dir)
     drive_weather = [w for d in drives if (w := weather_for_drive(d, weather))]
+    segments = all_segments(drives, r.location, weather, Terrain(settings.dem_dir, download=None))
 
     tables = [
         ("readings_battery", BatteryReading, r.battery),
@@ -145,6 +148,7 @@ def build_database(settings: Settings) -> dict[str, int]:
         ("charging_sessions", ChargingSession, sessions),
         ("charge_windows", ChargeWindow, windows),
         ("drive_weather", DriveWeather, drive_weather),
+        ("drive_segments", Segment, segments),
         ("forecast_hourly", ForecastHour, forecast_hours(settings.raw_dir)),
         ("fuel_prices", FuelWeek, [FuelWeek(**w) for w in load_fuel_prices(settings.raw_dir)]),
     ]

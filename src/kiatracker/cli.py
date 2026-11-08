@@ -19,6 +19,7 @@ import httpx
 from kiatracker.collect import poll
 from kiatracker.config import Settings, load_settings
 from kiatracker.db import build_database, derive_all, stats
+from kiatracker.elevation import Terrain, download_tile
 from kiatracker.forecast.features import drive_features
 from kiatracker.forecast.model import NotEnoughData, RangeModel
 from kiatracker.forecast.outlook import LOCAL, daily_outlook, fetch_forecast, latest_forecast
@@ -26,6 +27,7 @@ from kiatracker.forecast.train import DEFAULT_SPEED, MODEL_FILE, car_state, trai
 from kiatracker.pleos import PleosClient, PleosError
 from kiatracker.prices import download_oil_bulletin, fuel_is_stale, parse_oil_bulletin, store_fuel_prices
 from kiatracker.schedule import Job, run_jobs
+from kiatracker.segments import needs
 from kiatracker.synthetic import FAKE_HOME, generate
 from kiatracker.weather import fetch_weather
 
@@ -94,10 +96,11 @@ def cmd_refresh(settings: Settings, args) -> int:
     Each step is best-effort, so a network outage never stops the database from being rebuilt.
     """
     r, drives, _, _ = derive_all(settings)
+    keys, tiles = needs(drives, r.location)
     cell = settings.home or next(((p.lat, p.lon) for p in reversed(r.location) if p.lat is not None), None)
     with httpx.Client() as http:
         try:
-            fetched = fetch_weather(drives, settings.raw_dir, http, date.today())
+            fetched = fetch_weather(drives, settings.raw_dir, http, date.today(), extra=keys)
             print(f"Weather fetched for {fetched} place-days")
         except httpx.HTTPError as err:
             print(f"Weather skipped: {type(err).__name__}")
@@ -107,6 +110,8 @@ def cmd_refresh(settings: Settings, args) -> int:
                 print("Forecast fetched" if status == 200 else f"Forecast not available (HTTP {status})")
             except httpx.HTTPError as err:
                 print(f"Forecast skipped: {type(err).__name__}")
+        available = Terrain(settings.dem_dir, lambda name: download_tile(name, http)).prefetch(tiles)
+        print(f"Terrain tiles: {available} of {len(tiles)} available")
         if fuel_is_stale(settings.raw_dir, datetime.now(UTC)):
             try:
                 weeks = parse_oil_bulletin(download_oil_bulletin(http))

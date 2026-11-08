@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytest
 
-from kiatracker.forecast.features import drive_features
+from kiatracker.forecast.features import air_density_ratio, drive_features
 from kiatracker.forecast.model import MIN_DRIVES, NotEnoughData, RangeModel, fit
 from kiatracker.synthetic import TRUTH
 
@@ -76,7 +76,7 @@ def test_strong_pull_keeps_coefficients_at_the_prior_and_none_is_a_plain_fit():
     prior = {"c0": 6.0, "aero": 0.001, "heat": 15.0}
     rows = [row(aero=2500 + 300 * (i % 5), heat=(i % 4) / 10, kwh=20.0 + (i % 3)) for i in range(20)]
     pulled = fit_coefficients(rows, prior=prior, strength=1e6)
-    assert pulled == pytest.approx(prior, rel=0.02)
+    assert {k: pulled[k] for k in prior} == pytest.approx(prior, rel=0.02)
     assert fit_coefficients(rows, prior=prior, strength=0) == pytest.approx(fit_coefficients(rows), rel=1e-6)
 
 
@@ -86,3 +86,27 @@ def test_training_reports_the_specs_model_and_the_chosen_pull(demo):
     trained = train(demo)
     assert {"model", "specs", "mean", "temperature_only"} <= set(trained.backtest)
     assert trained.model.prior_strength >= 0
+
+
+def test_hills_are_learned_from_climb_and_descent():
+    # climb in m per 100 km; regen is minus the descent, so its (non-negative) coefficient lowers consumption
+    rows = []
+    for i in range(30):
+        climb, descent = 100.0 * (i % 6), 80.0 * (i % 5)
+        aero, heat = 3000 + 200 * (i % 7), (i % 3) / 10
+        kwh = 6 + 0.001 * aero + 15 * heat + 0.006 * climb - 0.003 * descent
+        rows.append(row(aero, heat, kwh) | {"climb": climb, "regen": -descent})
+    model = fit(rows)
+    assert model.coef["climb"] == pytest.approx(0.006, rel=0.02)
+    assert model.coef["regen"] == pytest.approx(0.003, rel=0.02)
+    flat = model.predict(60, 10, 3600)
+    assert model.predict(60, 10, 3600, climb=500) == pytest.approx(flat + 3.0, rel=0.02)
+
+
+def test_model_saved_before_hills_still_predicts(tmp_path):
+    path = tmp_path / "old.json"
+    old = RangeModel({"c0": 6.0, "aero": 0.001, "heat": 15.0}, -1, 1, 20, "2026-11-01")
+    old.save(path)
+    assert RangeModel.load(path).predict(60, 10, 3600, climb=300) == pytest.approx(
+        6 + 3.6 * air_density_ratio(10) + 2.0
+    )

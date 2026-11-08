@@ -1,6 +1,8 @@
-"""Physics-informed consumption model: kWh/100 km = c0 + aero·(v + headwind)² + heat·max(0, 18 − T)/v.
+"""Physics-informed consumption model:
+kWh/100 km = c0 + aero·(v + headwind)² + heat·max(0, 18 − T)/v + climb·(m up) − regen·(m down),
+with climb and descent in metres per 100 km.
 
-Three interpretable coefficients fitted by distance-weighted least squares, so it works with tens of drives,
+Five interpretable coefficients fitted by distance-weighted least squares, so it works with tens of drives,
 extrapolates sensibly to weather it hasn't seen, and explains itself. Every coefficient is kept non-negative:
 a negative one (cold "saving" energy, or a negative base load) is physically impossible.
 """
@@ -15,7 +17,7 @@ import numpy as np
 
 from kiatracker.forecast.features import T_BASE, physics
 
-FEATURES = ("aero", "heat")
+FEATURES = ("aero", "heat", "climb", "regen")
 MIN_DRIVES = 15
 QUANTILES = (0.1, 0.9)
 
@@ -35,12 +37,17 @@ class RangeModel:
     trained_at: str
     prior_strength: float = 0.0  # how strongly the fit was pulled toward the car-spec physics
 
-    def predict(self, speed_kph: float, temp_c: float, airspeed_sq: float) -> float:
-        x = physics(speed_kph, temp_c, airspeed_sq)
-        return self.coef["c0"] + sum(self.coef[f] * x[f] for f in FEATURES)
+    def predict(
+        self, speed_kph: float, temp_c: float, airspeed_sq: float, climb: float = 0.0, descent: float = 0.0
+    ) -> float:
+        """kWh/100 km; climb and descent in metres per 100 km (flat by default)."""
+        x = physics(speed_kph, temp_c, airspeed_sq) | {"climb": climb, "regen": -descent}
+        return self.coef["c0"] + sum(self.coef.get(f, 0.0) * x[f] for f in FEATURES)
 
-    def interval(self, speed_kph: float, temp_c: float, airspeed_sq: float) -> tuple[float, float, float]:
-        mid = self.predict(speed_kph, temp_c, airspeed_sq)
+    def interval(
+        self, speed_kph: float, temp_c: float, airspeed_sq: float, climb: float = 0.0, descent: float = 0.0
+    ) -> tuple[float, float, float]:
+        mid = self.predict(speed_kph, temp_c, airspeed_sq, climb, descent)
         return mid + self.residual_q10, mid, mid + self.residual_q90
 
     def explain(self, speed_kph: float = 50) -> list[str]:
@@ -52,6 +59,8 @@ class RangeModel:
             f"{self.coef['aero'] * (v**2 - (v - 20) ** 2):.1f}, since drag grows with airspeed squared.",
             f"Cold: at {v:.0f} km/h, each °C below {T_BASE:.0f} °C adds {self.coef['heat'] / v:.2f} "
             f"kWh/100 km (heating draws power by the hour, so slow cold trips cost the most).",
+            f"Hills: each 100 m climbed costs {self.coef.get('climb', 0.0) * 100:.2f} kWh; each 100 m "
+            f"downhill gives back {self.coef.get('regen', 0.0) * 100:.2f} kWh through regenerative braking.",
         ]
 
     def save(self, path: Path) -> None:
@@ -79,13 +88,15 @@ def fit_coefficients(
     names = ("c0", *features)
     y = np.array([r["kwh_per_100km"] for r in rows], dtype=float)
     w = np.sqrt(np.array([r["distance_km"] for r in rows], dtype=float))  # longer drives are measured better
-    columns = {"c0": np.ones(len(rows))} | {f: np.array([r[f] for r in rows], dtype=float) for f in features}
+    columns = {"c0": np.ones(len(rows))} | {
+        f: np.array([r.get(f, 0.0) for r in rows], dtype=float) for f in features
+    }
     # augmented system: data rows, then one penalty row per coefficient
     a_rows = [np.column_stack([columns[n] for n in names]) * w[:, None]]
     b_rows = [y * w]
     if prior is not None and strength > 0:
         pull = np.sqrt(strength * np.mean(w**2))
-        for i, n in enumerate(names):
+        for i, n in ((i, n) for i, n in enumerate(names) if n in prior):  # no prior: left free
             scale = max(float(np.mean(np.abs(columns[n]))), 1e-9)  # coefficient units -> kWh/100 km
             row = np.zeros(len(names))
             row[i] = pull * scale
@@ -105,7 +116,7 @@ def fit_coefficients(
 
 
 def predict_rows(coef: dict[str, float], rows: list[dict]) -> np.ndarray:
-    return np.array([coef["c0"] + sum(coef[f] * r[f] for f in FEATURES) for r in rows])
+    return np.array([coef["c0"] + sum(coef.get(f, 0.0) * r.get(f, 0.0) for f in FEATURES) for r in rows])
 
 
 def fit(

@@ -21,6 +21,11 @@ class Settings:
         return self.data_dir / "raw"
 
     @property
+    def dem_dir(self) -> Path:
+        """SRTM terrain tiles, downloaded by refresh and read offline by build."""
+        return self.data_dir / "dem"
+
+    @property
     def db_path(self) -> Path:
         return self.data_dir / "kiatracker.duckdb"
 

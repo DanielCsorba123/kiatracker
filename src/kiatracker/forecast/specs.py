@@ -21,6 +21,7 @@ class CarSpecs:
     drivetrain_efficiency: float  # battery to wheels
     auxiliary_kw: float  # electronics, pumps, lights
     heating_kw_per_degree: float  # below 18 °C; a guess the data must correct
+    regen_efficiency: float = 0.6  # share of the height energy a descent puts back in the battery
     typical_speed_kph: float = 60.0  # for folding the auxiliary load into the base term
 
 
@@ -46,4 +47,11 @@ def prior_coefficients(car: CarSpecs) -> dict[str, float]:
     # drag force = 1/2 rho Cd A v², with v in m/s = (km/h) / 3.6
     aero = 0.5 * AIR_DENSITY * car.drag_coefficient * car.frontal_area_m2 / 3.6**2 * per_100km
     heat = car.heating_kw_per_degree * 100  # kW per °C x (100 km / v) hours
-    return {"c0": rolling + auxiliary, "aero": aero, "heat": heat}
+    lift = car.mass_kg * G / J_PER_KWH  # kWh to raise the car one metre
+    return {
+        "c0": rolling + auxiliary,
+        "aero": aero,
+        "heat": heat,
+        "climb": lift / car.drivetrain_efficiency,  # kWh per metre climbed, at the battery
+        "regen": lift * car.regen_efficiency,  # kWh per metre descended, back into the battery
+    }

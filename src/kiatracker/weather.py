@@ -48,10 +48,15 @@ def load_weather(raw_dir: Path) -> dict[Key, dict]:
     return weather
 
 
-def fetch_weather(drives: list[Drive], raw_dir: Path, http: httpx.Client | None, today: date) -> int:
-    """Fetch every (cell, day) the drives need that is not cached yet. Returns the number of requests made."""
+def fetch_weather(
+    drives: list[Drive], raw_dir: Path, http: httpx.Client | None, today: date, extra: set[Key] = frozenset()
+) -> int:
+    """Fetch every (cell, day) the drives (and `extra` keys) need that is not cached yet.
+
+    Returns the number of requests made.
+    """
     have = set(load_weather(raw_dir))
-    needed = sorted({k for d in drives if (k := key_for(d)) and k not in have})
+    needed = sorted(({k for d in drives if (k := key_for(d))} | set(extra)) - have)
     for lat, lon, day in needed:
         params = {
             "latitude": lat,
