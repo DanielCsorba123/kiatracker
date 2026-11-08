@@ -18,16 +18,14 @@
 
 ## Next
 
-1. **Collection-stall alert:** a phone notification when no new reading has arrived for hours while the car
-   is in use, so a silent failure can't cost days of data.
-2. **Plan vs actual loop:** when a compared route is driven, match the recorded drive to the plan and show
+1. **Plan vs actual loop:** when a compared route is driven, match the recorded drive to the plan and show
    predicted vs measured energy per route; over time this is the honest test of the route predictor.
-3. **Residual learner** once ~150 clean drives exist: gradient boosting on what the physics model misses
+2. **Residual learner** once ~150 clean drives exist: gradient boosting on what the physics model misses
    (time of day, trip length, climate settings, temperature soak). Enters the same backtest; kept only if it
    wins.
-4. **Cabin-settings feature:** climate mode, set temperature, seat and steering-wheel heating are collected;
+3. **Cabin-settings feature:** climate mode, set temperature, seat and steering-wheel heating are collected;
    test whether they explain heating residuals once there are enough cold drives.
-5. **Speed curve and anomalies:** consumption against speed at today's temperature; drives far outside their
+4. **Speed curve and anomalies:** consumption against speed at today's temperature; drives far outside their
    interval flagged ("roof box? tyre pressure?").
 
 ## Later
