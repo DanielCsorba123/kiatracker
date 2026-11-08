@@ -121,3 +121,15 @@ def test_a_term_without_any_evidence_keeps_its_prior():
     coef = fit_coefficients(rows, prior=prior, strength=0.0)  # rows have no climb or regen at all
     assert (coef["climb"], coef["regen"]) == (0.006, 0.003)
     assert fit_coefficients(rows)["climb"] == 0.0  # no prior: nothing to fall back on
+
+
+def test_descents_never_give_back_more_than_climbs_cost():
+    # noisy data that, unconstrained, would credit descents more than climbs cost
+    rows = []
+    for i in range(30):
+        climb, descent = 100.0 * (i % 3), 100.0 * (i % 5)
+        aero = 3000 + 200 * (i % 7)
+        rows.append(row(aero, 0.1, 6 + 0.001 * aero + 1.5 + 0.002 * climb - 0.006 * descent)
+                    | {"climb": climb, "regen": -descent})  # fmt: skip
+    coef = fit_coefficients(rows)
+    assert coef["regen"] <= coef["climb"]

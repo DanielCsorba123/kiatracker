@@ -109,6 +109,9 @@ def fit_coefficients(
         beta, *_ = np.linalg.lstsq(a[:, free], b, rcond=None)
         if np.any(beta < 0):
             continue
+        fitted = dict(zip((names[i] for i in free), beta, strict=True))
+        if fitted.get("regen", 0.0) > fitted.get("climb", 0.0):
+            continue  # a descent can't give back more than the same climb costs
         error = float(np.sum((b - a[:, free] @ beta) ** 2))
         if error < best_error:
             best = dict.fromkeys(names, 0.0) | {names[i]: float(v) for i, v in zip(free, beta, strict=True)}
