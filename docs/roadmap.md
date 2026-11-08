@@ -13,11 +13,13 @@
 | Routes | OSRM routes and via places, ~1 km pieces with forecast weather and terrain, energy by cause, common-random-numbers Monte Carlo, levers |
 | Operations | Docker image for x86 / arm64; collector and dashboard on a Raspberry Pi; adaptive polling (1 / 5 min); Tailscale Serve access |
 | Learning | Model walkthrough notebook with decisions for the reader |
+| Showcase | Live demo on Streamlit Community Cloud with a simulated year (seasons, road trips, fast charging, hills) |
+| Backup | Nightly copy of the raw data to the PC with retries, verification and 30 + monthly retention |
 
 ## Next
 
-1. **Nightly backup** of the Pi's `data/` to the PC (or another disk): the only copy of the history lives on
-   one SD card / SSD. `rsync` over Tailscale from a scheduled task on the PC.
+1. **Collection-stall alert:** a phone notification when no new reading has arrived for hours while the car
+   is in use, so a silent failure can't cost days of data.
 2. **Plan vs actual loop:** when a compared route is driven, match the recorded drive to the plan and show
    predicted vs measured energy per route; over time this is the honest test of the route predictor.
 3. **Residual learner** once ~150 clean drives exist: gradient boosting on what the physics model misses

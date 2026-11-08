@@ -4,6 +4,9 @@
 <p align="center"><b>How far an EV3 really goes, in real weather.</b><br>
 <sub>kiatracker: a personal data platform and range model for a Kia EV3</sub></p>
 
+<p align="center"><a href="https://windrose-ev3.streamlit.app/"><b>▶ Try the live demo</b></a> · a simulated year of
+driving, charging and weather; plan a real route on the Routes page</p>
+
 kiatracker collects a Kia EV3's own data through the official EU Data Act API, turns it into drives and
 charging sessions, joins every stretch of every drive with its weather and terrain, and fits a
 physics-informed model of what speed, cold, wind and hills cost. It then uses that model to forecast range and
@@ -155,8 +158,17 @@ To explore the model yourself, run the walkthrough notebook on your data (see
 
 ### 7. Back it up
 
-Everything is in `data/`: raw files (the irreplaceable part), the database (rebuildable), terrain tiles
-(re-downloadable) and the model. Copy `data/raw/` somewhere else regularly.
+Everything is in `data/`: raw files (the irreplaceable part: the API only returns the latest reading), the
+database (rebuildable), terrain tiles (re-downloadable) and the model. Copy `data/raw/` off the collector
+regularly. On Windows, [scripts/backup-pi.ps1](scripts/backup-pi.ps1) does it over SSH: it packs `data/raw` on
+the host, copies and checks the archive, retries over flaky Wi-Fi, and keeps 30 nights plus one per month.
+Schedule it daily in Task Scheduler with "run as soon as possible after a missed start":
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scriptsackup-pi.ps1 -Target you@your-pi -Key $HOME\.ssh\id_ed25519
+```
+
+To restore, extract an archive into an empty `data/` and run `kiatracker build`.
 
 ### Troubleshooting
 
