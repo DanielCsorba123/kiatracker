@@ -165,7 +165,7 @@ the host, copies and checks the archive, retries over flaky Wi-Fi, and keeps 30 
 Schedule it daily in Task Scheduler with "run as soon as possible after a missed start":
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scriptsackup-pi.ps1 -Target you@your-pi -Key $HOME\.ssh\id_ed25519
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\backup-pi.ps1 -Target you@your-pi -Key $HOME\.ssh\id_ed25519
 ```
 
 To restore, extract an archive into an empty `data/` and run `kiatracker build`.
