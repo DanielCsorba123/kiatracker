@@ -10,7 +10,7 @@ from kiatracker.config import load_settings
 from kiatracker.dashboard.queries import Period, connect
 from kiatracker.dashboard.source import build_demo_database, may_show_personal, resolve_source
 from kiatracker.dashboard.ui import BRAND, LOGO, inject_style, sidebar_brand
-from kiatracker.dashboard.views import charging, costs, drives, overview
+from kiatracker.dashboard.views import charging, costs, drives, overview, routes
 from kiatracker.dashboard.views import range as range_page
 
 PAGES = [
@@ -18,7 +18,8 @@ PAGES = [
     (drives, "Drives", ":material/directions_car:"),
     (charging, "Charging", ":material/ev_station:"),
     (costs, "Costs", ":material/savings:"),
-    (range_page, "Range", ":material/route:"),
+    (range_page, "Range", ":material/battery_charging_full:"),
+    (routes, "Routes", ":material/route:"),
 ]
 
 

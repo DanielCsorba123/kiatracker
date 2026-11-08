@@ -10,6 +10,8 @@ import functools
 import altair as alt
 import pandas as pd
 
+from kiatracker.route_energy import CAUSES
+
 BLUE = "#2a78d6"  # categorical slot 1
 ORANGE = "#eb6834"  # categorical slot 2, for a second series when one is needed
 AQUA = "#1baf7a"  # categorical slot 3; the first three slots stay distinguishable for colour-blind readers
@@ -383,4 +385,58 @@ def histogram(
             y=alt.Y("count():Q", title="Sessions"),
             tooltip=[alt.Tooltip(f"{column}:Q", bin=bins, title=x_title), "count():Q"],
         )
+    )
+
+
+ROUTE_COLOURS = [BLUE, ORANGE, AQUA, "#8a63d2", "#c9a227"]
+CAUSE_COLOURS = ["#6f8fb5", BLUE, "#5bc0eb", ORANGE, "#8a63d2", AQUA]
+
+
+@styled
+def route_breakdown(parts: pd.DataFrame) -> alt.Chart:
+    """kWh per cause and route, stacked; regeneration goes left of zero. Columns: route, cause, kwh."""
+    df = parts.assign(label=parts["cause"].map(CAUSES))
+    return (
+        alt.Chart(df, title=alt.Title("Where the energy goes", anchor="start"))
+        .mark_bar(height=26, cornerRadius=3)
+        .encode(
+            x=alt.X("kwh:Q", title="kWh over the route (regeneration below zero)", stack="zero"),
+            y=alt.Y("route:N", sort=None, title=None, axis=alt.Axis(labelLimit=260, labelFontSize=12)),
+            color=alt.Color(
+                "label:N",
+                sort=list(CAUSES.values()),
+                scale=alt.Scale(domain=list(CAUSES.values()), range=CAUSE_COLOURS),
+                legend=alt.Legend(title=None, orient="bottom", columns=3),
+            ),
+            order=alt.Order("order:Q"),
+            tooltip=[
+                alt.Tooltip("route:N", title="Route"),
+                alt.Tooltip("label:N", title="Cause"),
+                _tip("kwh:Q", "kWh"),
+            ],
+        )  # fmt: skip
+        .transform_calculate(order=f"indexof({list(CAUSES.values())!r}, datum.label)")
+        .properties(height=max(46 * df["route"].nunique(), 120))
+    )
+
+
+@styled
+def route_profile(profile: pd.DataFrame, y: str, title: str, y_title: str) -> alt.Chart:
+    """One line per route along the distance driven. Columns: route, km, and `y`."""
+    routes = list(dict.fromkeys(profile["route"]))
+    return (
+        alt.Chart(profile, title=alt.Title(title, anchor="start"))
+        .mark_line(strokeWidth=2.5, interpolate="monotone")
+        .encode(
+            x=alt.X("km:Q", title="km from the start", axis=alt.Axis(grid=False)),
+            y=alt.Y(f"{y}:Q", title=y_title, scale=alt.Scale(zero=False)),
+            color=alt.Color(
+                "route:N",
+                sort=routes,
+                scale=alt.Scale(domain=routes, range=ROUTE_COLOURS),
+                legend=alt.Legend(title=None, orient="bottom"),
+            ),
+            tooltip=[alt.Tooltip("route:N", title="Route"), _tip("km:Q", "km"), _tip(f"{y}:Q", y_title)],
+        )  # fmt: skip
+        .properties(height=HEIGHT - 40)
     )

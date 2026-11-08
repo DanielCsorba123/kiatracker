@@ -36,6 +36,7 @@ class RangeModel:
     n_drives: int
     trained_at: str
     prior_strength: float = 0.0  # how strongly the fit was pulled toward the car-spec physics
+    median_km: float = 15.0  # typical training drive: tells measurement noise from model error
 
     def predict(
         self, speed_kph: float, temp_c: float, airspeed_sq: float, climb: float = 0.0, descent: float = 0.0
@@ -112,6 +113,9 @@ def fit_coefficients(
         if error < best_error:
             best = dict.fromkeys(names, 0.0) | {names[i]: float(v) for i, v in zip(free, beta, strict=True)}
             best_error = error
+    if prior is not None:
+        # no evidence at all (e.g. no terrain data: every climb is 0): keep the specs, not a silent zero
+        best |= {f: prior[f] for f in features if f in prior and not np.any(columns[f])}
     return best
 
 
@@ -133,5 +137,11 @@ def fit(
         residuals = list(np.array([r["kwh_per_100km"] for r in rows]) - predict_rows(coef, rows))
     q10, q90 = np.quantile(residuals, QUANTILES)
     return RangeModel(
-        coef, float(q10), float(q90), len(rows), datetime.now(UTC).isoformat(timespec="seconds"), strength
+        coef,
+        float(q10),
+        float(q90),
+        len(rows),
+        datetime.now(UTC).isoformat(timespec="seconds"),
+        strength,
+        float(np.median([r["distance_km"] for r in rows])),
     )

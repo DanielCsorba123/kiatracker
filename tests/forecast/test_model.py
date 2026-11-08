@@ -3,7 +3,7 @@ from datetime import datetime
 import pytest
 
 from kiatracker.forecast.features import air_density_ratio, drive_features
-from kiatracker.forecast.model import MIN_DRIVES, NotEnoughData, RangeModel, fit
+from kiatracker.forecast.model import MIN_DRIVES, NotEnoughData, RangeModel, fit, fit_coefficients
 from kiatracker.synthetic import TRUTH
 
 
@@ -110,3 +110,14 @@ def test_model_saved_before_hills_still_predicts(tmp_path):
     assert RangeModel.load(path).predict(60, 10, 3600, climb=300) == pytest.approx(
         6 + 3.6 * air_density_ratio(10) + 2.0
     )
+
+
+def test_a_term_without_any_evidence_keeps_its_prior():
+    prior = {"c0": 6.0, "aero": 0.001, "heat": 15.0, "climb": 0.006, "regen": 0.003}
+    rows = [
+        row(aero=2500 + 300 * (i % 5), heat=(i % 4) / 10, kwh=8 + 0.001 * (2500 + 300 * (i % 5)))
+        for i in range(20)
+    ]
+    coef = fit_coefficients(rows, prior=prior, strength=0.0)  # rows have no climb or regen at all
+    assert (coef["climb"], coef["regen"]) == (0.006, 0.003)
+    assert fit_coefficients(rows)["climb"] == 0.0  # no prior: nothing to fall back on

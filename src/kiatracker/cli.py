@@ -5,6 +5,7 @@ import argparse
 import dataclasses
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -23,9 +24,11 @@ from kiatracker.elevation import Terrain, download_tile
 from kiatracker.forecast.features import drive_features
 from kiatracker.forecast.model import NotEnoughData, RangeModel
 from kiatracker.forecast.outlook import LOCAL, daily_outlook, fetch_forecast, latest_forecast
+from kiatracker.forecast.scenarios import PRIOR
 from kiatracker.forecast.train import DEFAULT_SPEED, MODEL_FILE, car_state, train, weather_cell
 from kiatracker.pleos import PleosClient, PleosError
 from kiatracker.prices import download_oil_bulletin, fuel_is_stale, parse_oil_bulletin, store_fuel_prices
+from kiatracker.route_energy import Levers, PlaceNotFound, compare_routes, differences
 from kiatracker.schedule import Job, run_jobs
 from kiatracker.segments import needs
 from kiatracker.synthetic import FAKE_HOME, generate
@@ -235,6 +238,48 @@ def cmd_forecast(settings: Settings, args) -> int:
     return 0
 
 
+def cmd_route(settings: Settings, args) -> int:
+    """Compare routes between two places: energy, arrival charge and why, in the forecast weather."""
+    model_path = settings.data_dir / MODEL_FILE
+    model = RangeModel.load(model_path) if model_path.exists() else PRIOR
+    soc, capacity = None, None
+    if settings.db_path.exists():
+        with duckdb.connect(str(settings.db_path), read_only=True) as con:
+            soc, capacity = car_state(con)
+    depart = parse_departure(args.depart, datetime.now(LOCAL))
+    levers = Levers(depart, args.soc or soc or 80.0, capacity or 81.4, args.cap, args.pace / 100)
+    vias = [[p.strip() for p in v.split(";") if p.strip()] for v in args.via]
+    with httpx.Client() as http:
+        terrain = Terrain(settings.dem_dir, lambda name: download_tile(name, http))
+        try:
+            comparison = compare_routes(args.origin, args.destination, vias, levers, model, terrain, http)
+        except PlaceNotFound as err:
+            print(f"Couldn't find {err}; try a town name or 'lat, lon'.")
+            return 1
+    print(f"{comparison.origin.name} -> {comparison.destination.name}, leaving {depart:%a %d %b %H:%M}, "
+          f"{levers.start_soc:.0f}% charge, model: {model.n_drives} drives")  # fmt: skip
+    for e in comparison.estimates:
+        print(
+            f"  {e.route.label:24} {e.km:5.0f} km {e.minutes:4.0f} min  {e.kwh_p50:5.1f} kWh "
+            f"({e.kwh_p10:.1f}-{e.kwh_p90:.1f})  arrive {e.arrival_soc_p50:3.0f}%  climb {e.climb_m:4.0f} m"
+        )
+    for line in differences(comparison.estimates):
+        print(f"  - {line}")
+    return 0
+
+
+def parse_departure(text: str | None, now: datetime) -> datetime:
+    """'HH:MM' (today, or tomorrow if already past), an ISO date-time, or now."""
+    if not text:
+        return now
+    if re.fullmatch(r"\d{1,2}:\d{2}", text):
+        hour, minute = map(int, text.split(":"))
+        at = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        return at if at >= now else at + timedelta(days=1)
+    parsed = datetime.fromisoformat(text)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=LOCAL)
+
+
 def dashboard_command(
     demo: bool,
     environ: Mapping[str, str],
@@ -292,6 +337,15 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("train", help="fit the range model on your drives and show how well it predicts")
     forecast = sub.add_parser("forecast", help="range for today and the next days in the forecast weather")
     forecast.add_argument("--offline", action="store_true", help="use the last fetched forecast")
+    route = sub.add_parser("route", help="compare routes' energy and arrival charge in the forecast weather")
+    route.add_argument("origin", help='place name or "lat, lon"')
+    route.add_argument("destination")
+    route.add_argument("--via", action="append", default=[], help="also a route through these places "
+                       "(';'-separated, in order); repeat for more routes")  # fmt: skip
+    route.add_argument("--depart", help="HH:MM or an ISO date-time, local time (default: now)")
+    route.add_argument("--soc", type=float, help="charge at departure, %% (default: the car's latest)")
+    route.add_argument("--cap", type=float, help="speed cap, km/h")
+    route.add_argument("--pace", type=float, default=100, help="your pace vs typical road speeds, %%")
     dashboard = sub.add_parser("dashboard", help="open the dashboard in your browser (this computer only)")
     dashboard.add_argument("--demo", action="store_true", help="show generated demo data, not yours")
     dashboard.add_argument("--port", type=int, default=8501)
@@ -318,6 +372,7 @@ def main(argv: list[str] | None = None) -> int:
         "dashboard": cmd_dashboard,
         "train": cmd_train,
         "forecast": cmd_forecast,
+        "route": cmd_route,
         "refresh": cmd_refresh,
         "scheduler": cmd_scheduler,
     }

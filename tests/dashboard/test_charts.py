@@ -215,3 +215,18 @@ def test_drive_log_puts_each_drive_on_a_timeline():
     enc = charts.drive_log(DRIVES).to_dict()["encoding"]
     assert enc["x"]["field"] == "start_local" and enc["y"]["field"] == "kwh_per_100km"
     assert enc["size"]["field"] == "distance_km" and enc["color"]["field"] == "temp_c"
+
+
+def test_route_breakdown_stacks_causes_with_regen_below_zero():
+    parts = pd.DataFrame(
+        {"route": ["A", "A", "B"], "cause": ["base", "regen", "climb"], "kwh": [7.0, -2.0, 4.0]}
+    )
+    spec = charts.route_breakdown(parts).to_dict()
+    assert spec["encoding"]["x"]["stack"] == "zero"
+    assert "Downhill regen" in spec["encoding"]["color"]["scale"]["domain"]
+
+
+def test_route_profile_has_one_colour_per_route():
+    profile = pd.DataFrame({"route": ["A", "A", "B", "B"], "km": [0, 1, 0, 1], "kwh": [0, 0.2, 0, 0.3]})
+    spec = charts.route_profile(profile, "kwh", "Energy", "kWh").to_dict()
+    assert spec["encoding"]["color"]["scale"]["domain"] == ["A", "B"]

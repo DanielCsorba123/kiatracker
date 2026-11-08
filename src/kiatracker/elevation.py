@@ -48,8 +48,13 @@ class Terrain:
                 except (httpx.HTTPError, OSError):
                     data = None
                 if data:
-                    self.folder.mkdir(parents=True, exist_ok=True)
-                    path.write_bytes(data)
+                    try:
+                        self.folder.mkdir(parents=True, exist_ok=True)
+                        path.write_bytes(data)
+                    except OSError:  # read-only data folder (the dashboard container): keep it in memory
+                        raw = np.frombuffer(data, dtype=">i2")
+                        self.tiles[name] = raw.reshape(math.isqrt(raw.size), -1)
+                        return self.tiles[name]
             if path.exists():
                 raw = np.memmap(path, dtype=">i2", mode="r")  # 26 MB per tile: read only the samples used
                 size = math.isqrt(raw.size)

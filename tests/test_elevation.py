@@ -54,3 +54,11 @@ def test_climb_and_descent_over_a_path(tmp_path):
     terrain = Terrain(tmp_path, download=None)
     climb, descent = terrain.climb_descent([(47.5, 18.0), (47.5, 18.5), (47.5, 18.2)])
     assert (climb, descent) == pytest.approx((50, 30))
+
+
+def test_tile_is_used_from_memory_when_the_folder_is_read_only(tmp_path):
+    blocked = tmp_path / "file-not-folder"
+    blocked.write_text("x")  # a file where the tile folder should be: writing fails
+    data = np.full((3, 3), 250, dtype=">i2").tobytes()
+    terrain = Terrain(blocked, download=lambda name: gzip.compress(data))
+    assert terrain.elevation(47.5, 18.5) == 250
