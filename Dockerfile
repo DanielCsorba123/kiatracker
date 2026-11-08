@@ -3,7 +3,7 @@
 FROM python:3.13-slim
 COPY --from=ghcr.io/astral-sh/uv:0.9.5 /uv /usr/local/bin/uv
 WORKDIR /app
-ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 UV_HTTP_TIMEOUT=300 UV_CONCURRENT_DOWNLOADS=4
 
 # Dependencies first, so code changes don't reinstall them
 COPY pyproject.toml uv.lock README.md ./
