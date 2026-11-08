@@ -12,9 +12,10 @@ the car's wind resistance to be part of the baseline.
 
 - **Specs model** (`forecast/specs.py`): coefficients computed from the EV3's specifications: mass 1,950 kg,
   drag coefficient 0.265, frontal area 2.45 m², rolling resistance 0.009, drivetrain efficiency 0.90,
-  auxiliaries 0.4 kW, heating 0.15 kW per °C below 18 °C, 60 % of descent energy regenerated. That gives about
-  c0 = 6.0 kWh/100 km, c_aero = 0.00095, c_heat = 15, c_climb = 0.0059 kWh/m, c_regen = 0.0032 kWh/m, and about
-  17.5 kWh/100 km at 110 km/h in still, mild air.
+  a time-based load of 1.0 kW (electronics, pumps and town stop-and-go), heating 0.15 kW per °C below 18 °C,
+  cooling 0.12 kW per °C above 24 °C, 60 % of descent energy regenerated. That gives about c0 = 5.3 kWh/100 km,
+  c_aero = 0.00095, c_heat = 15, c_cool = 12, c_time = 100, c_climb = 0.0059 kWh/m, c_regen = 0.0032 kWh/m,
+  and about 17.6 kWh/100 km at 110 km/h in still, mild air.
 - **Ridge pull toward the specs:** the fit adds one pseudo-observation per coefficient, worth `strength`
   average drives, saying "this coefficient equals the specs". The strength is chosen from
   (0, 1, 3, 10, 30, 100) by the backtest. A coefficient the drives say nothing about (an input that never

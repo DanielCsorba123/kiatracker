@@ -229,6 +229,7 @@ def effect_bars(effects: pd.DataFrame) -> alt.LayerChart:
     df = effects.assign(
         condition=effects["factor"] + ": " + effects["harder_label"] + " vs " + effects["easier_label"],
         shown=effects["diff_kwh"].where(effects["enough"], 0).fillna(0),
+        label_at=effects["diff_kwh"].where(effects["enough"], 0).fillna(0).clip(lower=0),  # never on the bar
         label=[
             f"{d:+.1f} kWh/100 km ({p:+.0%})" if ok and d is not None else "needs more drives"
             for d, p, ok in zip(effects["diff_kwh"], effects["pct"], effects["enough"], strict=True)
@@ -249,7 +250,7 @@ def effect_bars(effects: pd.DataFrame) -> alt.LayerChart:
         ],
     )
     labels = base.mark_text(align="left", dx=8, fontSize=12, color=MUTED).encode(
-        x="shown:Q", y=y, text="label:N"
+        x="label_at:Q", y=y, text="label:N"
     )
     return alt.layer(bars, labels).properties(height=46 * len(df))
 
@@ -389,7 +390,7 @@ def histogram(
 
 
 ROUTE_COLOURS = [BLUE, ORANGE, AQUA, "#8a63d2", "#c9a227"]
-CAUSE_COLOURS = ["#6f8fb5", BLUE, "#5bc0eb", ORANGE, "#8a63d2", AQUA]
+CAUSE_COLOURS = ["#6f8fb5", "#9aa6b8", BLUE, "#5bc0eb", ORANGE, "#e34948", "#8a63d2", AQUA]
 
 
 @styled
@@ -406,7 +407,7 @@ def route_breakdown(parts: pd.DataFrame) -> alt.Chart:
                 "label:N",
                 sort=list(CAUSES.values()),
                 scale=alt.Scale(domain=list(CAUSES.values()), range=CAUSE_COLOURS),
-                legend=alt.Legend(title=None, orient="bottom", columns=3),
+                legend=alt.Legend(title=None, orient="bottom", columns=4, labelLimit=220),
             ),
             order=alt.Order("order:Q"),
             tooltip=[
@@ -416,7 +417,8 @@ def route_breakdown(parts: pd.DataFrame) -> alt.Chart:
             ],
         )  # fmt: skip
         .transform_calculate(order=f"indexof({list(CAUSES.values())!r}, datum.label)")
-        .properties(height=max(46 * df["route"].nunique(), 120))
+        # Streamlit fits title, axis and legend into this height too, so leave room for them
+        .properties(height=46 * df["route"].nunique() + 150)
     )
 
 

@@ -18,10 +18,14 @@ of how sure the answer is.
 - **Pieces:** each route is cut into ~1 km pieces from OSRM's per-edge distances and durations. A piece is
   driven at a known time (departure + time so far), so it gets that hour's forecast for its cell, its own
   headwind and its climb.
-- **Energy:** the range model prices each piece; the total is split by cause (rolling, drag, wind, heating,
-  climbing, regeneration).
+- **Energy:** the range model prices each piece; the total is split by cause (rolling, time-based load, drag,
+  wind, heating, air conditioning, climbing, regeneration).
+- **Via points are exact:** OSRM routes through the point given, so a town name means its centre. Motorway
+  alternatives are chosen with interchange names (Nominatim knows them, e.g. "Knoten Prater") or coordinates,
+  and every route lists its main roads so the choice can be checked.
 - **Uncertainty:** 1,000 simulated days per route: forecast temperature ±1.5 °C, wind speed ±25 % and
-  direction ±20°, pace ±4 %, plus the model's own error. Each error is shared along the route (a wrong
+  direction ±20°, pace ±4 %, the model's coefficients (bootstrap refits, or ±20 % around the specs), plus
+  the model's own error. Each error is shared along the route (a wrong
   forecast is wrong everywhere). The model's residual spread contains the battery-reading noise of short
   training drives, which a long trip does not suffer, so that part is subtracted using the model's median
   training distance.

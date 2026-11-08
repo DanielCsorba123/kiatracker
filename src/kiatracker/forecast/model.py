@@ -1,23 +1,24 @@
 """Physics-informed consumption model:
-kWh/100 km = c0 + aero·(v + headwind)² + heat·max(0, 18 − T)/v + climb·(m up) − regen·(m down),
+kWh/100 km = c0 + aero·(v + headwind)² + heat·max(0, 18 − T)/v + cool·max(0, T − 24)/v + time/v
+            + climb·(m up) − regen·(m down),
 with climb and descent in metres per 100 km.
 
-Five interpretable coefficients fitted by distance-weighted least squares, so it works with tens of drives,
+Seven interpretable coefficients fitted by distance-weighted least squares, so it works with tens of drives,
 extrapolates sensibly to weather it hasn't seen, and explains itself. Every coefficient is kept non-negative:
 a negative one (cold "saving" energy, or a negative base load) is physically impossible.
 """
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from itertools import chain, combinations
 from pathlib import Path
 
 import numpy as np
 
-from kiatracker.forecast.features import T_BASE, physics
+from kiatracker.forecast.features import T_BASE, T_COOL, physics
 
-FEATURES = ("aero", "heat", "climb", "regen")
+FEATURES = ("aero", "heat", "cool", "time", "climb", "regen")
 MIN_DRIVES = 15
 QUANTILES = (0.1, 0.9)
 
@@ -37,6 +38,7 @@ class RangeModel:
     trained_at: str
     prior_strength: float = 0.0  # how strongly the fit was pulled toward the car-spec physics
     median_km: float = 15.0  # typical training drive: tells measurement noise from model error
+    coef_draws: list[dict] = field(default_factory=list)  # bootstrap refits: how sure the coefficients are
 
     def predict(
         self, speed_kph: float, temp_c: float, airspeed_sq: float, climb: float = 0.0, descent: float = 0.0
@@ -54,12 +56,16 @@ class RangeModel:
     def explain(self, speed_kph: float = 50) -> list[str]:
         v = speed_kph
         return [
-            f"Base: {self.coef['c0']:.1f} kWh/100 km for rolling resistance, drivetrain and electronics.",
+            f"Base: {self.coef['c0']:.1f} kWh/100 km for rolling resistance and drivetrain losses.",
+            f"Time on the road: {self.coef.get('time', 0.0) / 100:.2f} kW for electronics, pumps and town "
+            f"stop-and-go, i.e. {self.coef.get('time', 0.0) / v:.1f} kWh/100 km at {v:.0f} km/h.",
             f"Air resistance: at {v:.0f} km/h, a 20 km/h headwind adds "
             f"{self.coef['aero'] * ((v + 20) ** 2 - v**2):.1f} kWh/100 km; the same tailwind saves only "
             f"{self.coef['aero'] * (v**2 - (v - 20) ** 2):.1f}, since drag grows with airspeed squared.",
             f"Cold: at {v:.0f} km/h, each °C below {T_BASE:.0f} °C adds {self.coef['heat'] / v:.2f} "
             f"kWh/100 km (heating draws power by the hour, so slow cold trips cost the most).",
+            f"Heat: each °C above {T_COOL:.0f} °C adds {self.coef.get('cool', 0.0) / v:.2f} kWh/100 km "
+            f"for air conditioning at {v:.0f} km/h.",
             f"Hills: each 100 m climbed costs {self.coef.get('climb', 0.0) * 100:.2f} kWh; each 100 m "
             f"downhill gives back {self.coef.get('regen', 0.0) * 100:.2f} kWh through regenerative braking.",
         ]
@@ -120,6 +126,20 @@ def fit_coefficients(
         # no evidence at all (e.g. no terrain data: every climb is 0): keep the specs, not a silent zero
         best |= {f: prior[f] for f in features if f in prior and not np.any(columns[f])}
     return best
+
+
+def bootstrap(
+    rows: list[dict], prior: dict | None = None, strength: float = 0.0, n: int = 60, seed: int = 0
+) -> list[dict]:
+    """Coefficients refitted on `n` resamples of the drives (with replacement): their spread is how sure the
+    fit is, which the route comparison carries into its odds."""
+    rng = np.random.default_rng(seed)
+    return [
+        fit_coefficients(
+            [rows[i] for i in rng.integers(0, len(rows), len(rows))], prior=prior, strength=strength
+        )
+        for _ in range(n)
+    ]
 
 
 def predict_rows(coef: dict[str, float], rows: list[dict]) -> np.ndarray:

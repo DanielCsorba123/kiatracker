@@ -1,6 +1,7 @@
 # 0006. A physics-informed regression, not a generic ML model
 
-**Status:** Accepted, November 2026 (climb and regeneration terms added 8 November 2026)
+**Status:** Accepted, November 2026 (climb and regeneration terms added 8 November 2026; air conditioning and a
+time-based load added 9 November 2026, after slow, hot conditions predicted impossible ranges)
 
 ## Context
 
@@ -13,9 +14,11 @@ conditions not seen yet (the first frost, a motorway trip into a storm).
 A linear model in physically derived features, fitted per car:
 
 ```
-kWh/100 km = c0
+kWh/100 km = c0                                            rolling resistance, drivetrain
            + c_aero  · (v + headwind)² · ρ(T)/ρ15        air drag on airspeed, denser when cold
            + c_heat  · max(0, 18 − T) / v                 heating power × time per km
+           + c_cool  · max(0, T − 24) / v                 air conditioning × time per km
+           + c_time  / v                                  electronics and stop-and-go losses × time per km
            + c_climb · metres climbed per 100 km
            − c_regen · metres descended per 100 km
 ```

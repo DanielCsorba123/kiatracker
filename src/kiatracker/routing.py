@@ -34,6 +34,7 @@ class Route:
     points: list[tuple[float, float]]  # (lat, lon), one more than edges
     edge_km: list[float]
     edge_s: list[float]
+    roads: str = ""  # the main roads in driving order, e.g. "S33, A1, A21, A2"
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,7 @@ def _osrm(places: list[Place], http: httpx.Client, alternatives: bool) -> list[d
             "overview": "full",
             "geometries": "geojson",
             "annotations": "distance,duration",
+            "steps": "true",  # for the road names
         },
         timeout=30,
     )
@@ -81,11 +83,25 @@ def _osrm(places: list[Place], http: httpx.Client, alternatives: bool) -> list[d
     return body.get("routes", []) if body.get("code") == "Ok" else []
 
 
+def main_roads(raw: dict, share: float = 0.04) -> str:
+    """Road numbers (or names) carrying at least `share` of the distance, in the order they are driven."""
+    km: dict[str, float] = {}
+    for leg in raw["legs"]:
+        for step in leg.get("steps", []):
+            road = (step.get("ref") or step.get("name") or "").split(";")[0].replace(" ", "")
+            if road:
+                km[road] = km.get(road, 0.0) + step["distance"] / 1000
+    total = sum(km.values())
+    return ", ".join(road for road, length in km.items() if total and length >= share * total)
+
+
 def _route(label: str, raw: dict) -> Route:
     edge_km = [d / 1000 for leg in raw["legs"] for d in leg["annotation"]["distance"]]
     edge_s = [s for leg in raw["legs"] for s in leg["annotation"]["duration"]]
     points = [(lat, lon) for lon, lat in raw["geometry"]["coordinates"]]
-    return Route(label, raw["distance"] / 1000, raw["duration"] / 60, points, edge_km, edge_s)
+    return Route(
+        label, raw["distance"] / 1000, raw["duration"] / 60, points, edge_km, edge_s, main_roads(raw)
+    )
 
 
 def fetch_routes(

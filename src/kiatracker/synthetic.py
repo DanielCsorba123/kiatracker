@@ -21,7 +21,6 @@ from kiatracker.raw import append_record, append_records
 
 FAKE_HOME = (47.0, 18.0)  # a field in rural Hungary, not anyone's home
 WORK = (0.13, 0.17)  # offsets in degrees from home
-ERRANDS = [(0.03, 0.05), (-0.04, 0.03), (0.05, -0.06), (0.02, -0.03)]
 OUTINGS = [(0.32, -0.22), (-0.28, 0.36), (0.2, 0.42), (-0.35, -0.3)]
 ROAD_TRIPS = [(1.2, -1.6), (-0.4, 2.1), (1.5, 0.9)]  # 150-230 km away
 CAPACITY_KJ = 293040.0
@@ -30,12 +29,22 @@ POLL = timedelta(minutes=5)
 AC_KW = 11.0
 DC_KW = 120.0
 FORECAST_DAYS = 3
-# true physics: kWh/100 km = c0 + c_aero*(v+h)^2*density + c_heat*heat,
+# true physics: kWh/100 km = c0 + c_aero*(v+h)^2*density + (c_heat*cold + c_cool*hot + c_time) / v,
 # plus c_climb kWh per metre climbed and c_regen kWh back per metre descended
-TRUTH = {"c0": 7.5, "c_aero": 0.00105, "c_heat": 13.0, "c_climb": 0.0062, "c_regen": 0.0030}
+TRUTH = {
+    "c0": 5.8,
+    "c_aero": 0.00100,
+    "c_heat": 13.0,
+    "c_cool": 11.0,
+    "c_time": 110.0,  # 1.1 kW: electronics, pumps and stop-and-go losses, per hour on the road
+    "c_climb": 0.0062,
+    "c_regen": 0.0030,
+}
 T_BASE = 18.0
-NOISE_KWH_100KM = 0.6
-ROAD_FACTOR = 1.25  # roads are longer than the straight line
+T_COOL = 24.0
+NOISE_KWH_100KM = 1.1  # traffic, driving style, tyre pressure, how full the car is
+EXTRA_CHANCE = 0.1  # now and then a drive costs clearly more: a passenger, a jam, a roof box, no pre-heating
+ROAD_FACTOR = 1.25  # roads are longer than the straight line (motorway stages)
 
 
 @dataclass(frozen=True)
@@ -74,9 +83,19 @@ class FakeTerrain:
 
 
 def true_consumption(speed: float, headwind: float, temp: float) -> float:
-    heat = max(0.0, T_BASE - temp) / speed
+    per_hour = TRUTH["c_heat"] * max(0.0, T_BASE - temp) + TRUTH["c_cool"] * max(0.0, temp - T_COOL)
     density = 288.15 / (273.15 + temp)  # cold air is denser, as in the model's features
-    return TRUTH["c0"] + TRUTH["c_aero"] * (speed + headwind) ** 2 * density + TRUTH["c_heat"] * heat
+    return (
+        TRUTH["c0"]
+        + TRUTH["c_aero"] * (speed + headwind) ** 2 * density
+        + (per_hour + TRUTH["c_time"]) / speed
+    )
+
+
+def around_home(rng: random.Random, km_low: float, km_high: float) -> tuple[float, float]:
+    """A random place `km_low`-`km_high` km from home in any direction, as an offset in degrees."""
+    bearing, km = rng.uniform(0, 2 * math.pi), rng.uniform(km_low, km_high)
+    return km * math.cos(bearing) / 111.0, km * math.sin(bearing) / 76.0
 
 
 def iso(ts: datetime) -> str:
@@ -150,7 +169,7 @@ class Car:
     ) -> datetime:
         """Drive in a straight line to `to`, `km` by the odometer, charging energy one poll step at a time."""
         end = start + timedelta(hours=km / speed)
-        noise = rng.gauss(0, NOISE_KWH_100KM)
+        noise = rng.gauss(0, NOISE_KWH_100KM) + (rng.uniform(1, 4) if rng.random() < EXTRA_CHANCE else 0.0)
         bearing = bearing_deg(self.pos, to) if self.pos != to else None
         origin, odo0 = self.pos, self.odo
         previous, done_before = start, 0.0
@@ -273,18 +292,23 @@ def plan_day(day: datetime, rng: random.Random, road_trip: bool) -> list[tuple]:
     if day.weekday() < 5:
         legs = [leg(WORK, (45, 95), rng.uniform(450, 540), "commute")]
         if rng.random() < 0.35:
-            legs.append(leg(rng.choice(ERRANDS), (25, 60), rng.uniform(15, 60), "errand"))
+            legs.append(leg(around_home(rng, 2, 9), (25, 60), rng.uniform(15, 60), "errand"))
         legs.append(leg((0, 0), (45, 95), 0, "commute"))
         return legs
     legs = []
     if rng.random() < 0.6:
         legs += [
-            leg(rng.choice(OUTINGS), (50, 110), rng.uniform(90, 300), "outing"),
+            leg(
+                rng.choice(OUTINGS) if rng.random() < 0.5 else around_home(rng, 15, 50),
+                (50, 110),
+                rng.uniform(90, 300),
+                "outing",
+            ),
             leg((0, 0), (50, 110), 0, "outing"),
         ]
     if rng.random() < 0.5:
         legs += [
-            leg(rng.choice(ERRANDS), (25, 60), rng.uniform(20, 90), "errand"),
+            leg(around_home(rng, 2, 12), (25, 60), rng.uniform(20, 90), "errand"),
             leg((0, 0), (25, 60), 0, "errand"),
         ]
     return legs
@@ -312,8 +336,9 @@ def generate(raw_dir: Path, start: datetime, days: int, seed: int = 7) -> list[d
         trips_by_day.setdefault((t - start).days, []).append((t, end))
         return end
 
-    def road_km(a, b):
-        return round(haversine_km(a, b) * ROAD_FACTOR + rng.uniform(0.5, 3), 1)
+    def road_km(a, b, factor=None):
+        """Odometer km: the straight line times how winding the road is (and any detour) that day."""
+        return round(haversine_km(a, b) * (factor or rng.uniform(1.12, 1.5)) + rng.uniform(0.3, 2), 1)
 
     def long_drive(t, to, speed):
         """Motorway in stages of ~100 km, with a fast charge whenever the battery gets low."""
@@ -324,7 +349,7 @@ def generate(raw_dir: Path, start: datetime, days: int, seed: int = 7) -> list[d
                 origin[0] + (to[0] - origin[0]) * n / stages,
                 origin[1] + (to[1] - origin[1]) * n / stages,
             )
-            t = drive(t, target, road_km(car.pos, target), speed * rng.uniform(0.95, 1.03))
+            t = drive(t, target, road_km(car.pos, target, ROAD_FACTOR), speed * rng.uniform(0.95, 1.03))
             if n < stages:
                 t += timedelta(minutes=rng.uniform(8, 20))
                 if car.soc < 60 and rng.random() < 0.8:  # top up during the break

@@ -17,28 +17,38 @@ correction for long trips below. Drives with an unseen period or impossible ener
 ## 2. The model
 
 ```
-kWh/100 km = c0                                          rolling resistance, drivetrain, electronics
+kWh/100 km = c0                                          rolling resistance and drivetrain losses
            + c_aero  · mean[(v + h)² · ρ(T)/ρ15]         air drag on airspeed; ρ(T)/ρ15 = 288.15 / (273.15 + T)
            + c_heat  · mean[max(0, 18 − T) / v]          heating power × hours per km
+           + c_cool  · mean[max(0, T − 24) / v]          air-conditioning power × hours per km
+           + c_time  · mean[1 / v]                       electronics, pumps and stop-and-go losses per hour
            + c_climb · metres climbed per 100 km
            − c_regen · metres descended per 100 km
 ```
+
+Heating, cooling and the time-based load are power drawn per hour, so per km they grow as the average speed
+falls. The time-based term matters most in town: a low average speed means frequent stops, and each
+acceleration loses energy that regeneration doesn't fully return. Without it, slow summer driving would look
+nearly free (a 900 km range at 40 km/h), which no EV achieves.
 
 Means are distance-weighted over the drive's stretches, each with its own speed `v` (scaled by the road
 factor), headwind `h` and temperature `T`. Squaring per stretch matters: out and back into a 30 km/h wind has
 a mean headwind of zero but costs ((v+w)² + (v−w)²)/2 = v² + w².
 
 **Fit:** distance-weighted least squares with all coefficients ≥ 0 and `c_regen ≤ c_climb`, solved exactly by
-fitting every subset of free coefficients (2⁵ − 1 = 31 small least-squares problems) and keeping the best
+fitting every subset of free coefficients (2⁷ − 1 = 127 small least-squares problems) and keeping the best
 feasible one.
 
 **Prior:** the car's specifications give each coefficient
-(`forecast/specs.py`; mass 1,950 kg, Cd 0.265, A 2.45 m², Crr 0.009, η 0.90, 0.4 kW auxiliaries, 0.15 kW/°C
-heating, 60 % regeneration):
+(`forecast/specs.py`; mass 1,950 kg, Cd 0.265, A 2.45 m², Crr 0.009, η 0.90, 1.0 kW time-based load, 0.15 kW/°C
+heating, 0.12 kW/°C cooling, 60 % regeneration):
 
-| | c0 | c_aero | c_heat | c_climb | c_regen |
-|---|---|---|---|---|---|
-| specs | ≈ 6.0 | ≈ 0.00095 | 15 | ≈ 0.0059 kWh/m | ≈ 0.0032 kWh/m |
+| | c0 | c_aero | c_heat | c_cool | c_time | c_climb | c_regen |
+|---|---|---|---|---|---|---|---|
+| specs | ≈ 5.3 | ≈ 0.00095 | 15 | 12 | 100 | ≈ 0.0059 kWh/m | ≈ 0.0032 kWh/m |
+
+That predicts about 740 km at a steady 40 km/h in 30 °C, 470 km at 20 km/h in 35 °C and 390 km at 110 km/h
+around freezing, in line with owners' reports for the EV3.
 
 The fit is pulled toward these values by `strength` pseudo-drives per coefficient (ridge regression toward a
 prior, each penalty row scaled by the feature's mean magnitude so the strength means the same for every
@@ -70,12 +80,17 @@ forecast temperature and wind. Without a route, wind averages over all direction
 ## 5. Route comparison (Routes page, `kiatracker route`)
 
 1. Geocode the places (Nominatim, or "lat, lon" typed directly).
-2. OSRM: the fastest route, its alternatives, and one route through each line of via places.
+2. OSRM: the fastest route (by typical road speeds, no live traffic), its alternatives, and one route through
+   each line of via points. A via point is passed exactly: a town name is its centre, so motorway routes are
+   chosen with interchanges ("Knoten Prater" for the A23 through Vienna) or coordinates. Each route lists its
+   main roads, so what it really uses is visible.
 3. Cut each route into ~1 km pieces from OSRM's per-edge distances and durations; apply the speed cap and pace.
 4. For each piece: departure + time so far → the forecast hour for its 0.1° cell (one Open-Meteo request
    covers up to 50 cells); headwind along its bearing; climb and descent from the terrain tiles.
 5. Price each piece with the model; sum by cause.
 6. Monte Carlo, 1,000 draws, the same draws for every route:
+   - the model's coefficients: one of 60 refits on resampled drives (a bootstrap) per draw, or ±20 % around
+     the specs when no fit is used, so the odds include how unsure the model itself is;
    - forecast temperature + N(0, 1.5 °C);
    - wind speed × lognormal(0, 0.25), wind direction + N(0, 20°);
    - speed × N(1, 0.04);

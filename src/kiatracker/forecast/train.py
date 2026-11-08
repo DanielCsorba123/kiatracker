@@ -1,13 +1,13 @@
 """Train, evaluate and describe the range model from the database; shared by the CLI and the dashboard."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from statistics import median
 
 import duckdb
 
 from kiatracker.forecast.evaluate import backtest
 from kiatracker.forecast.features import drive_features
-from kiatracker.forecast.model import RangeModel, fit
+from kiatracker.forecast.model import RangeModel, bootstrap, fit
 from kiatracker.forecast.specs import EV3, prior_coefficients
 
 MODEL_FILE = "models/range.json"
@@ -35,6 +35,7 @@ def train(con: duckdb.DuckDBPyConnection) -> Trained:
     strength = min(scored, key=lambda s: scored[s]["model"]["mae"]) if scored else STRENGTHS[-1]
     result = scored.get(strength)
     model = fit(rows, result["residuals"] if result else None, prior=PRIOR_COEF, strength=strength)
+    model = replace(model, coef_draws=bootstrap(rows, PRIOR_COEF, strength))
     return Trained(model, result, median(r["speed_kph"] for r in rows) if rows else DEFAULT_SPEED)
 
 

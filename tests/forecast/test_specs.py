@@ -7,15 +7,26 @@ from kiatracker.forecast.specs import EV3, prior_coefficients
 def test_prior_coefficients_follow_from_the_specs():
     coef = prior_coefficients(EV3)
     assert coef["aero"] == pytest.approx(0.00095, rel=0.05)
-    assert coef["c0"] == pytest.approx(6.0, abs=0.5)
+    assert coef["c0"] == pytest.approx(
+        5.3, abs=0.3
+    )  # rolling resistance only; time-based load is its own term
     assert coef["heat"] == pytest.approx(15.0)
+    assert (coef["time"], coef["cool"]) == (pytest.approx(100.0), pytest.approx(12.0))
 
 
 def test_prior_matches_real_world_motorway_consumption():
     coef = prior_coefficients(EV3)
     x = physics(110, 15, 110**2)
-    kwh = coef["c0"] + coef["aero"] * x["aero"] + coef["heat"] * x["heat"]
+    kwh = coef["c0"] + sum(coef[f] * x[f] for f in ("aero", "heat", "cool", "time"))
     assert 16 < kwh < 19
+
+
+def test_slow_hot_driving_is_not_free():
+    """At 20 km/h in 35 °C the air conditioning and the time-based load dominate: range stays realistic."""
+    coef = prior_coefficients(EV3)
+    x = physics(20, 35, 20**2)
+    kwh = coef["c0"] + sum(coef[f] * x[f] for f in ("aero", "heat", "cool", "time"))
+    assert 81.4 / kwh * 100 < 600
 
 
 def test_cold_air_is_denser_so_drag_costs_more():

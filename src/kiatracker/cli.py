@@ -261,7 +261,8 @@ def cmd_route(settings: Settings, args) -> int:
     for e in comparison.estimates:
         print(
             f"  {e.route.label:24} {e.km:5.0f} km {e.minutes:4.0f} min  {e.kwh_p50:5.1f} kWh "
-            f"({e.kwh_p10:.1f}-{e.kwh_p90:.1f})  arrive {e.arrival_soc_p50:3.0f}%  climb {e.climb_m:4.0f} m"
+            f"({e.kwh_p10:.1f}-{e.kwh_p90:.1f})  arrive {e.arrival_soc_p50:3.0f}%  climb {e.climb_m:4.0f} m  "
+            f"{e.route.roads}"
         )
     for line in differences(comparison.estimates):
         print(f"  - {line}")

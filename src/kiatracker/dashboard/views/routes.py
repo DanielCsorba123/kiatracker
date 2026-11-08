@@ -50,13 +50,16 @@ def form(soc_now: float | None) -> dict | None:
         destination = right.text_input("To", "Wiener Neustadt")
         vias = st.text_area(
             "Also compare routes through",
-            "St. Pölten\nWien",
-            help="One route per line; several places on a line, separated by ';', are passed in order.",
+            "Knoten Vösendorf\nKnoten Prater",
+            help="One route per line; several points on a line, separated by ';', are passed in order. The "
+            "route is forced through that exact point, so a town name means its centre. To pick a motorway, "
+            "name an interchange (Knoten Prater: A23 through Vienna; Knoten Vösendorf: A21 to the A2) or "
+            "type 'lat, lon'. The Roads column shows what each route really uses.",
         )
         a, b, c, d = st.columns(4)
-        day = a.date_input("Departure", date.today(), min_value=date.today(),
-                           max_value=date.today() + timedelta(days=6))  # fmt: skip
         next_hour = (datetime.now(LOCAL) + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+        day = a.date_input("Departure", next_hour.date(), min_value=date.today(),
+                           max_value=date.today() + timedelta(days=6))  # fmt: skip
         hour = b.time_input("Time", next_hour.time(), step=timedelta(minutes=30))
         soc = c.slider("Charge at departure", 10, 100, int(soc_now or 80), format="%d %%")
         cap = d.selectbox("Speed cap", list(CAPS), help="Lever: what slowing down on fast roads saves.")
@@ -80,10 +83,11 @@ def table(comparison: Comparison) -> pd.DataFrame:
     return pd.DataFrame(
         {
             "Route": e.route.label,
+            "Roads": e.route.roads,
             "Distance": e.km,
             "Time": e.minutes,
             "Energy": e.kwh_p50,
-            "Likely range": f"{e.kwh_p10:.1f}–{e.kwh_p90:.1f} kWh",
+            "80 % range": f"{e.kwh_p10:.1f}–{e.kwh_p90:.1f}",
             "Arrive with": e.arrival_soc_p50,
             "Above 10 %": e.p_reserve,
             "Climbing": e.climb_m,
@@ -165,10 +169,16 @@ def render(con, period: queries.Period) -> None:
         column_config={
             "Distance": st.column_config.NumberColumn(format="%.0f km"),
             "Time": st.column_config.NumberColumn(format="%.0f min"),
-            "Energy": st.column_config.NumberColumn("Energy (most likely)", format="%.1f kWh"),
+            "Energy": st.column_config.NumberColumn(
+                help="Most likely energy for the route", format="%.1f kWh"
+            ),
             "Arrive with": st.column_config.NumberColumn(format="%.0f %%"),
             "Above 10 %": st.column_config.ProgressColumn(
-                "Chance to arrive above 10 %", format="percent", min_value=0, max_value=1
+                "Odds ≥ 10 %",
+                help="Chance of arriving with at least 10 % charge, over 1,000 simulated days",
+                format="percent",
+                min_value=0,
+                max_value=1,
             ),
             "Climbing": st.column_config.NumberColumn(format="%.0f m"),
         },
@@ -205,10 +215,13 @@ def render(con, period: queries.Period) -> None:
             f"""
 * **Model:** {which};
   base {model.coef["c0"]:.1f} kWh/100 km, plus drag, heating, climbing and regeneration terms.
+* **Routes:** OSRM on OpenStreetMap roads, the fastest by typical speeds, without live traffic; a via point
+  forces the route through it.
 * **Pieces:** OSRM's road speeds per ~1 km{capped}, at {request["pace"]:.0%} pace; each piece's time
   decides which forecast hour it gets.
 * **Uncertainty:** 1,000 simulated days. Forecast temperature ±1.5 °C, wind ±25 % and ±20°,
-  traffic ±4 %, plus how far the model misses real drives. Every route sees the same simulated days,
+  traffic ±4 %, how unsure the model's coefficients are (refits on resampled drives), plus how far the
+  model misses real drives. Every route sees the same simulated days,
   so the odds compare like with like. The battery's 0.5 % reading steps blur short drives, so that
   part of the model's misses is taken out for long trips.
 * **Privacy:** the places you type go to OpenStreetMap (Nominatim) and the OSRM route server; ~10 km weather

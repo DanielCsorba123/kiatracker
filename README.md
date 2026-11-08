@@ -26,7 +26,8 @@ to compare routes before you drive them.
   trusted (an unseen overnight charge, an impossible reading).
 - **Explains consumption:** each stretch between GPS readings gets the hour's temperature and wind for its
   ~10 km cell, its headwind and its climb from terrain maps.
-- **Models it** with five interpretable coefficients (base, air drag, heating, climbing, regeneration),
+- **Models it** with seven interpretable coefficients (rolling, air drag, heating, air conditioning,
+  time-based load, climbing, regeneration),
   starting from the car's specifications and learning from the drives as they come in. A time-ordered
   backtest decides how much to trust each.
 - **Forecasts range** for the coming days' weather, and **compares routes**: energy by cause, arrival charge
@@ -39,6 +40,11 @@ to compare routes before you drive them.
 | **Drives:** what changes consumption, range in any conditions, the drive log and an analyst view. | **Range:** the next days' range in the forecast weather, with the model's evidence. |
 | ![Charging: energy per week and battery level at plug-in and unplug](docs/images/charging.png) | ![Costs: savings against a petrol car](docs/images/costs.png) |
 | **Charging:** energy per week and where in the battery charging starts and stops. | **Costs:** what driving electric saved against petrol. |
+
+![Routes: three ways from Krems to Wiener Neustadt with roads, energy, odds, energy by cause, profiles and map](docs/images/routes.png)
+
+**Routes:** candidate routes with the roads they use, energy and arrival charge in the forecast weather, the
+odds that one beats another, where the energy goes, and the height profile.
 
 All screenshots use the built-in simulator's demo data.
 
@@ -196,16 +202,18 @@ To restore, extract an archive into an empty `data/` and run `kiatracker build`.
 | `kiatracker dashboard [--demo]` | open the dashboard, local only |
 | `kiatracker demo` | generate and build fake data into `data/demo/` |
 
-Example (car-specs model, one evening's forecast):
+Example (car-specs model, an evening's forecast). Via points are passed exactly, so motorway routes are
+picked with interchanges, and each route lists the roads it really uses:
 
 ```
-$ kiatracker route "Krems an der Donau" "Wiener Neustadt" --via "St. Pölten" --via Wien --depart 08:00
-  Fastest                    122 km   86 min   24.5 kWh (22.5-26.7)  arrive  60%  climb  781 m
-  via St. Pölten             132 km   98 min   26.0 kWh (23.9-28.4)  arrive  58%  climb  804 m
-  via Wien                   135 km  109 min   24.3 kWh (22.2-26.6)  arrive  60%  climb  352 m
+$ kiatracker route "Krems an der Donau" "Wiener Neustadt" --via "Knoten Vösendorf" --via "Knoten Prater" --soc 90
+  Fastest                    122 km   86 min   24.6 kWh (21.0-29.1)  arrive  60%  climb  781 m  B37a, S33, A1, A21, B210, A2
+  via Knoten Vösendorf       147 km   99 min   29.7 kWh (25.3-35.2)  arrive  54%  climb  963 m  B37a, S33, A1, A21, A2
+  via Knoten Prater          136 km  103 min   24.6 kWh (21.3-28.9)  arrive  60%  climb  376 m  S5, A22, A23, A2
+  - via Knoten Prater uses less on 47% of simulated days ...
 ```
 
-12 km longer through Vienna, but 430 m less climbing: about the same energy.
+Through Vienna on the A23 is 14 km longer but climbs 405 m less: a tie, and the odds say so.
 
 ## How it works
 
@@ -221,7 +229,9 @@ Open-Meteo, SRTM, EU fuel prices ─refresh─▶ (cached as raw records and til
 - **Physics, not a black box:**
 
   ```
-  kWh/100 km = c0 + c_aero·(v + headwind)²·ρ(T) + c_heat·max(0, 18 − T)/v + c_climb·up − c_regen·down
+  kWh/100 km = c0 + c_aero·(v + headwind)²·ρ(T)
+             + (c_heat·max(0, 18 − T) + c_cool·max(0, T − 24) + c_time) / v
+             + c_climb·up − c_regen·down
   ```
 
   Non-negative coefficients, pulled toward the car's specifications while data is scarce, evaluated with a

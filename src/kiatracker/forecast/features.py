@@ -13,6 +13,7 @@ from kiatracker.geo import path_airspeed_sq, path_headwind
 from kiatracker.segments import Segment
 
 T_BASE = 18.0  # °C below which heating draws power
+T_COOL = 24.0  # °C above which air conditioning draws power
 MIN_KM = 5.0  # shorter drives are too coarse to measure (0.5 % SOC steps)
 MIN_STRETCH_KPH = 5.0  # a 5-minute stretch spent mostly parked would make heating per km explode
 COLUMNS = (
@@ -25,6 +26,8 @@ COLUMNS = (
     "headwind_kph",
     "aero",
     "heat",
+    "cool",
+    "time",
     "climb",
     "regen",
     "kwh_per_100km",
@@ -37,10 +40,14 @@ def air_density_ratio(temp_c: float) -> float:
 
 
 def physics(speed_kph: float, temp_c: float, airspeed_sq: float) -> dict:
-    """The model's two weather features for a speed, temperature and squared airspeed."""
+    """Features for a speed, temperature and squared airspeed. Heating, cooling and the time-based load
+    (electronics, pumps, and the stop-and-go losses that come with a low average speed) draw power per hour,
+    so per km they scale with 1 / speed."""
     return {
         "aero": airspeed_sq * air_density_ratio(temp_c),
         "heat": max(0.0, T_BASE - temp_c) / speed_kph,
+        "cool": max(0.0, temp_c - T_COOL) / speed_kph,
+        "time": 1.0 / speed_kph,
     }
 
 
@@ -55,20 +62,20 @@ def segment_features(segments: list[Segment], distance_km: float) -> dict | None
         return None
     total = sum(s.km for s in segments)
     road_factor = distance_km / total if total > 0 else 1.0  # the odometer is the trusted distance
-    aero = heat = temp = headwind = 0.0
+    sums = dict.fromkeys(("aero", "heat", "cool", "time"), 0.0)
+    temp = headwind = 0.0
     for s in segments:
         speed = max(s.speed_kph * road_factor, MIN_STRETCH_KPH)
         x = physics(speed, s.temp_c, (speed + s.headwind_kph) ** 2)
-        aero += s.km * x["aero"]
-        heat += s.km * x["heat"]
+        for name in sums:
+            sums[name] += s.km * x[name]
         temp += s.km * s.temp_c
         headwind += s.km * s.headwind_kph
     per_100km = 100 / distance_km
     return {
         "temp_c": temp / total,
         "headwind_kph": headwind / total,
-        "aero": aero / total,
-        "heat": heat / total,
+        **{name: value / total for name, value in sums.items()},
         "climb": sum(s.climb_m or 0.0 for s in segments) * per_100km,
         "regen": -sum(s.descent_m or 0.0 for s in segments) * per_100km,
     }

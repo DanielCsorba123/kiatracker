@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 import httpx
 import numpy as np
 
-from kiatracker.forecast.features import T_BASE, air_density_ratio
+from kiatracker.forecast.features import T_BASE, T_COOL, air_density_ratio
 from kiatracker.forecast.model import RangeModel
 from kiatracker.geo import headwind_kph
 from kiatracker.routing import Piece, Place, Route, cut_pieces, fetch_routes, geocode
@@ -21,20 +21,24 @@ from kiatracker.segments import hour_values
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 CELLS_PER_REQUEST = 50
 CAUSES = {
-    "base": "Rolling and electronics",
+    "base": "Rolling and drivetrain",
+    "time": "Electronics and stop-and-go",
     "drag": "Air drag (still air)",
     "wind": "Wind",
     "heating": "Heating",
+    "cooling": "Air conditioning",
     "climb": "Climbing",
     "regen": "Downhill regen",
 }
 COMPONENTS = tuple(CAUSES)
 # each cause in words, by which way it moves the energy (regen: more of it saves energy)
-MORE = {"base": "more rolling and electronics", "drag": "more air drag", "wind": "more headwind",
-        "heating": "more heating", "climb": "more climbing",
+MORE = {"base": "more rolling resistance", "time": "more time on the road", "drag": "more air drag",
+        "wind": "more headwind", "heating": "more heating", "cooling": "more air conditioning",
+        "climb": "more climbing",
         "regen": "less energy back downhill"}  # fmt: skip
-LESS = {"base": "less rolling and electronics", "drag": "less air drag", "wind": "less headwind",
-        "heating": "less heating", "climb": "less climbing",
+LESS = {"base": "less rolling resistance", "time": "less time on the road", "drag": "less air drag",
+        "wind": "less headwind", "heating": "less heating", "cooling": "less air conditioning",
+        "climb": "less climbing",
         "regen": "more energy back downhill"}  # fmt: skip
 # Monte Carlo spreads: how wrong a day-ahead forecast and the traffic typically are
 TEMP_SD = 1.5  # °C
@@ -43,6 +47,7 @@ WIND_DIR_SD = 20.0  # degrees
 PACE_SD = 0.04  # share of speed
 READING_NOISE_KWH = 0.4  # one 0.5 % step of the battery reading: blurs every measured drive by about this
 FALLBACK_TEMP = 10.0  # when the forecast is missing for a piece (flagged in the result)
+SPECS_SD = 0.2  # without fitted drives, each coefficient is trusted to about ±20 %
 
 
 @dataclass(frozen=True)
@@ -156,6 +161,8 @@ def energy_breakdown(cond: list[Conditions], model: RangeModel) -> dict[str, flo
         parts["drag"] += per * c["aero"] * x.speed_kph**2 * rho
         parts["wind"] += per * c["aero"] * ((x.speed_kph + x.headwind_kph) ** 2 - x.speed_kph**2) * rho
         parts["heating"] += per * c["heat"] * max(0.0, T_BASE - temp) / x.speed_kph
+        parts["cooling"] += per * c.get("cool", 0.0) * max(0.0, temp - T_COOL) / x.speed_kph
+        parts["time"] += per * c.get("time", 0.0) / x.speed_kph
         parts["climb"] += c.get("climb", 0.0) * x.climb_m
         parts["regen"] -= c.get("regen", 0.0) * x.descent_m
     return parts
@@ -164,7 +171,7 @@ def energy_breakdown(cond: list[Conditions], model: RangeModel) -> dict[str, flo
 def simulate(cond: list[Conditions], model: RangeModel, samples: int = 1000, seed: int = 0) -> np.ndarray:
     """Trip kWh under `samples` plausible versions of the day (each error shared along the whole route)."""
     rng = np.random.default_rng(seed)
-    c = model.coef
+    c = coefficient_draws(model, samples, rng)
     km = np.array([x.km for x in cond])
     speed = np.array([x.speed_kph for x in cond])[None, :] * rng.normal(1, PACE_SD, (samples, 1))
     temp = np.array([FALLBACK_TEMP if x.temp_c is None else x.temp_c for x in cond])[None, :]
@@ -181,11 +188,25 @@ def simulate(cond: list[Conditions], model: RangeModel, samples: int = 1000, see
         c["c0"]
         + c["aero"] * (speed + head) ** 2 * (288.15 / (273.15 + temp))
         + c["heat"] * np.maximum(0.0, T_BASE - temp) / speed
+        + c.get("cool", 0.0) * np.maximum(0.0, temp - T_COOL) / speed
+        + c.get("time", 0.0) / speed
     )
-    hills = sum(c.get("climb", 0.0) * x.climb_m - c.get("regen", 0.0) * x.descent_m for x in cond)
+    climb, descent = sum(x.climb_m for x in cond), sum(x.descent_m for x in cond)
+    hills = (c["climb"] * climb - c["regen"] * descent)[:, 0]
     kwh = (per_100 * km / 100).sum(axis=1) + hills
     centre = (model.residual_q10 + model.residual_q90) / 2
     return kwh + rng.normal(centre, model_error_sd(model), samples) * km.sum() / 100
+
+
+def coefficient_draws(model: RangeModel, samples: int, rng: np.random.Generator) -> dict[str, np.ndarray]:
+    """One coefficient set per simulated day, as (samples, 1) columns: the model's bootstrap refits, or
+    for the specs model ±20 % around each value. Every route gets the same sets in the same order."""
+    names = ("c0", "aero", "heat", "cool", "time", "climb", "regen")
+    draws = model.coef_draws or [
+        {k: model.coef.get(k, 0.0) * rng.lognormal(0, SPECS_SD) for k in names} for _ in range(200)
+    ]
+    pick = np.arange(samples) % len(draws)
+    return {k: np.array([d.get(k, 0.0) for d in draws])[pick][:, None] for k in names}
 
 
 def model_error_sd(model: RangeModel) -> float:
