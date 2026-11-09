@@ -203,11 +203,15 @@ def latest_fuel_week(con) -> str | None:
     return con.execute("select max(week) from fuel_prices").fetchone()[0]
 
 
-def costs(con, period: Period, assume: CostAssumptions) -> pd.DataFrame:
-    """Per month: what the EV's energy cost, against a petrol and a diesel car over the same distance,
-    at Hungarian prices (forint) and, for comparison, Austrian prices (euro)."""
+BUCKETS = {"week": "%G-W%V", "month": "%Y-%m", "year": "%Y"}
+
+
+def costs(con, period: Period, assume: CostAssumptions, freq: str = "month") -> pd.DataFrame:
+    """Per week, month or year (`bucket`): what the EV's energy cost, against a petrol and a diesel car over
+    the same distance, at Hungarian prices (forint) and, for comparison, Austrian prices (euro). Fuel prices
+    are those of each drive's month, so the totals are the same whichever bucket is chosen."""
     columns = [
-        "month",
+        "bucket",
         "distance_km",
         "battery_kwh",
         "ev_huf",
@@ -225,27 +229,41 @@ def costs(con, period: Period, assume: CostAssumptions) -> pd.DataFrame:
     per_km = measured["energy_kwh"].sum() / measured["distance_km"].sum() if not measured.empty else 0.17
     d["battery_kwh"] = d["energy_kwh"].where(d["energy_kwh"] > 0, d["distance_km"] * per_km)
     d["month"] = d["start_local"].dt.strftime("%Y-%m")
-    monthly = d.groupby("month", as_index=False)[["distance_km", "battery_kwh"]].sum()
-    rows = []
-    for m in monthly.itertuples():
-        price = fuel_price_for_month(con, m.month)
-        grid_kwh = m.battery_kwh / (1 - assume.charging_loss_pct / 100)
-        petrol_l = m.distance_km * assume.petrol_l_per_100km / 100
-        diesel_l = m.distance_km * assume.diesel_l_per_100km / 100
-        rows.append(
-            {
-                "month": m.month,
-                "distance_km": m.distance_km,
-                "battery_kwh": m.battery_kwh,
-                "ev_huf": grid_kwh * assume.hu_electricity_huf,
-                "petrol_huf": petrol_l * price["hu_petrol_huf"],
-                "diesel_huf": diesel_l * price["hu_diesel_huf"],
-                "ev_at_eur": grid_kwh * assume.at_electricity_eur,
-                "petrol_at_eur": petrol_l * price["at_petrol_eur"],
-                "diesel_at_eur": diesel_l * price["at_diesel_eur"],
-            }
-        )
-    return pd.DataFrame(rows, columns=columns)
+    prices = {m: fuel_price_for_month(con, m) for m in d["month"].unique()}
+    grid_kwh = d["battery_kwh"] / (1 - assume.charging_loss_pct / 100)
+    petrol_l = d["distance_km"] * assume.petrol_l_per_100km / 100
+    diesel_l = d["distance_km"] * assume.diesel_l_per_100km / 100
+
+    def price(name: str) -> pd.Series:
+        return d["month"].map(lambda m: prices[m][name])
+
+    d["ev_huf"] = grid_kwh * assume.hu_electricity_huf
+    d["petrol_huf"] = petrol_l * price("hu_petrol_huf")
+    d["diesel_huf"] = diesel_l * price("hu_diesel_huf")
+    d["ev_at_eur"] = grid_kwh * assume.at_electricity_eur
+    d["petrol_at_eur"] = petrol_l * price("at_petrol_eur")
+    d["diesel_at_eur"] = diesel_l * price("at_diesel_eur")
+    d["bucket"] = d["start_local"].dt.strftime(BUCKETS[freq])
+    return d.groupby("bucket", as_index=False)[columns[1:]].sum()[columns]
+
+
+def bucket_label(bucket: str, freq: str) -> str:
+    """'the week of 2 Nov', 'October' or '2025'."""
+    if freq == "week":
+        monday = date.fromisocalendar(int(bucket[:4]), int(bucket[6:]), 1)
+        return f"the week of {monday.day} {monday:%b}"
+    if freq == "month":
+        return f"{date.fromisoformat(bucket + '-01'):%B}"
+    return bucket
+
+
+def savings(df: pd.DataFrame, freq: str, today: date) -> pd.DataFrame:
+    """Saved against petrol per bucket; `complete` is False for the bucket today falls in."""
+    current = today.strftime(BUCKETS[freq])
+    out = df[["bucket", "distance_km", "ev_huf", "petrol_huf"]].copy()
+    out["saved_huf"] = out["petrol_huf"] - out["ev_huf"]
+    out["complete"] = out["bucket"] != current
+    return out
 
 
 # (factor, column, harder condition, its label, easier condition, its label)

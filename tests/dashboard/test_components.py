@@ -249,3 +249,30 @@ def test_common_bins_never_pass_100():
     assert (
         common_bins(pd.Series([82.0, 88.0, 100.0, 100.0, 100.0])) == "between 90 and 100 %"
     )  # like the chart
+
+
+def test_savings_figures_round_and_colour():
+    row = pd.Series(
+        dict(
+            bucket="2026-10",
+            distance_km=2150,
+            ev_huf=14644.0,
+            petrol_huf=74820.0,
+            saved_huf=60176.0,
+            complete=True,
+        )
+    )
+    out = components.savings_figures(row, "October", 6.5)
+    assert "60 200 Ft" in out and "14 600 Ft" in out and "74 800 Ft" in out
+    assert components.theme.CORAL_INK in out and "Saved in October" in out and "2 150 km" in out
+
+
+def test_compare_bars_scale_to_the_largest():
+    out = components.compare_bars(
+        [
+            ("Your EV", 693, "home", components.theme.SKY),
+            ("Petrol car", 3480, "6.5 L", components.theme.CORAL),
+        ],
+        lambda v: f"{v:.0f} Ft",
+    )
+    assert "width: 20%" in out and "width: 100%" in out and "3480 Ft" in out

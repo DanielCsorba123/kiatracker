@@ -364,3 +364,30 @@ def session_list(df, n: int = 5) -> str:
             f'<span class="r wr-note">{kw}</span></div>'
         )
     return f'<div class="wr-sessions">{"".join(rows)}</div>'
+
+
+def savings_figures(row, label: str, petrol_l_per_100km: float) -> str:
+    """The big saving of one period, with what electricity cost and what petrol would have."""
+    km = f"{row['distance_km']:,.0f}".replace(",", " ")
+    return (
+        '<div class="wr-savings">'
+        f'<div><span class="wr-note">Saved in {e(label)}</span>'
+        f'<b class="big" style="color: {theme.CORAL_INK}">{fmt_ft(row["saved_huf"])}</b></div>'
+        f'<div><span class="wr-note">You paid for electricity</span>'
+        f'<b style="color: {theme.SKY_INK}">{fmt_ft(row["ev_huf"])}</b>'
+        f'<span class="wr-note">{km} km, home charging</span></div>'
+        f'<div><span class="wr-note">Petrol would have cost</span><b>{fmt_ft(row["petrol_huf"])}</b>'
+        f'<span class="wr-note">{petrol_l_per_100km:g} L/100 km at Hungarian pump prices</span></div></div>'
+    )
+
+
+def compare_bars(items: list[tuple[str, float, str, str]], unit) -> str:
+    """Horizontal rounded bars, each scaled to the largest: (name, value, note, colour)."""
+    top = max((v for _, v, _, _ in items), default=0) or 1
+    rows = "".join(
+        f'<div class="row"><div><b>{e(name)}</b><span class="wr-note">{e(note)}</span></div>'
+        f'<div class="track"><i style="width: {v / top * 100:.0f}%; background: {e(colour)}"></i></div>'
+        f'<span class="v">{e(unit(v))}</span></div>'
+        for name, v, note, colour in items
+    )
+    return f'<div class="wr-compare">{rows}</div>'

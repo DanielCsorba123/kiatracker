@@ -95,7 +95,7 @@ def test_costs_arithmetic(tiny):
     with tiny() as con:
         [row] = q.costs(con, Period(date(2026, 11, 1), date(2026, 11, 30)), assume).to_dict("records")
     grid_kwh = 15 / 0.9  # 15 kWh into the battery over 100 km, 10 % lost on the way
-    assert row["month"] == "2026-11" and row["distance_km"] == 100
+    assert row["bucket"] == "2026-11" and row["distance_km"] == 100
     assert row["ev_huf"] == pytest.approx(grid_kwh * 70.0)
     assert row["petrol_huf"] == pytest.approx(6.5 * 640)  # November's average Hungarian petrol price
     assert row["diesel_huf"] == pytest.approx(5.0 * 700)
@@ -246,3 +246,30 @@ def test_plug_hours_has_all_24_hours(demo, all_time):
 
 def test_plug_hours_empty(empty, all_time):
     assert q.plug_hours(empty, all_time)["sessions"].sum() == 0
+
+
+@pytest.mark.parametrize("freq", ["week", "month", "year"])
+def test_cost_buckets_sum_to_the_same_total(demo, all_time, freq):
+    assume = q.CostAssumptions()
+    month = q.costs(demo, all_time, assume, "month")
+    other = q.costs(demo, all_time, assume, freq)
+    assert other["petrol_huf"].sum() == pytest.approx(month["petrol_huf"].sum())
+    assert other["ev_huf"].sum() == pytest.approx(month["ev_huf"].sum())
+    assert other["bucket"].is_unique
+
+
+def test_week_buckets_are_iso_weeks(tiny):
+    c = q.costs(tiny(), Period(date(2026, 11, 1), date(2026, 11, 30)), q.CostAssumptions(), "week")
+    assert list(c["bucket"]) == ["2026-W45", "2026-W46"]
+
+
+def test_current_bucket_is_marked_incomplete(demo, all_time):
+    s = q.savings(q.costs(demo, all_time, q.CostAssumptions(), "month"), "month", date.today())
+    assert not s["complete"].iloc[-1] and s["complete"].iloc[:-1].all()
+    assert (s["saved_huf"] == s["petrol_huf"] - s["ev_huf"]).all()
+
+
+def test_bucket_labels():
+    assert q.bucket_label("2026-W45", "week") == "the week of 2 Nov"
+    assert q.bucket_label("2026-10", "month") == "October"
+    assert q.bucket_label("2025", "year") == "2025"

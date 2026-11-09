@@ -152,31 +152,6 @@ def predicted_vs_actual(df: pd.DataFrame, unit: str) -> alt.LayerChart:
 
 
 @styled
-def grouped_bar(
-    df: pd.DataFrame, x: str, series: str, y: str, title: str, y_title: str, order: list[str]
-) -> alt.Chart:
-    """Bars side by side per x value; each series keeps its colour whatever is filtered (legend shown)."""
-    colors = alt.Scale(domain=order, range=[SKY, CORAL, PALE][: len(order)])
-    return (
-        _base(df, title)
-        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
-        .encode(
-            x=alt.X(f"{x}:O", title=None, axis=alt.Axis(labelAngle=0, grid=False)),
-            xOffset=alt.XOffset(f"{series}:N", sort=order),
-            y=alt.Y(f"{y}:Q", title=y_title),
-            color=alt.Color(
-                f"{series}:N", scale=colors, sort=order, legend=alt.Legend(title=None, orient="top")
-            ),
-            tooltip=[
-                _tip(f"{x}:O", "Month"),
-                _tip(f"{series}:N", "Car"),
-                alt.Tooltip(f"{y}:Q", title=y_title, format=",.0f"),
-            ],
-        )
-    )
-
-
-@styled
 def points_with_bands(
     drives: pd.DataFrame,
     x: str,
@@ -556,3 +531,28 @@ def plug_hours(df: pd.DataFrame) -> alt.Chart:
         )
         .properties(height=130)
     )
+
+
+@styled
+def savings_bars(df: pd.DataFrame) -> alt.LayerChart:
+    """Saved against petrol per bucket; the last complete bucket in coral with its value. Columns: bucket,
+    saved_huf, complete."""
+    data = df.copy()
+    complete = data.index[data["complete"]]
+    data["highlight"] = data.index == (complete[-1] if len(complete) else -1)
+    data["label"] = [f"{v / 1000:.0f}k" for v in data["saved_huf"]]
+    base = alt.Chart(data).encode(x=alt.X("bucket:O", title=None, sort=None, axis=alt.Axis(labelAngle=0)))
+    bars = base.mark_bar(size=40).encode(
+        y=alt.Y("saved_huf:Q", title=None, axis=None),
+        color=alt.condition("datum.highlight", alt.value(CORAL), alt.value(PALE)),
+        tooltip=[
+            alt.Tooltip("bucket:O", title="Period"),
+            alt.Tooltip("saved_huf:Q", title="Saved (Ft)", format=",.0f"),
+        ],
+    )
+    labels = base.mark_text(dy=-8, fontSize=12).encode(
+        y="saved_huf:Q",
+        text="label:N",
+        color=alt.condition("datum.highlight", alt.value(theme.INK), alt.value(MUTED)),
+    )
+    return (bars + labels).properties(height=HEIGHT - 70)

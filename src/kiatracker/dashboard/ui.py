@@ -188,6 +188,21 @@ h1, h2, h3 {{ font-family: "{t.SERIF}", serif; font-weight: 400; letter-spacing:
   .wr-sessions .row {{ grid-template-columns: 90px minmax(0, 1fr) 70px; }}
   .wr-sessions .row > :nth-child(2), .wr-sessions .soc, .wr-sessions .row > :last-child {{ display: none; }}
 }}
+.wr-savings {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 8px; }}
+.wr-savings div {{ display: flex; flex-direction: column; gap: 2px; }}
+.wr-savings b {{ font-family: "{t.SERIF}", serif; font-weight: 400; font-size: 28px; }}
+.wr-savings b.big {{ font-size: 44px; line-height: 1.1; }}
+.wr-compare {{ display: flex; flex-direction: column; gap: 14px; }}
+.wr-compare .row {{ display: grid; grid-template-columns: 170px minmax(0, 1fr) 120px; gap: 16px; align-items: center; }}
+.wr-compare .row > div:first-child {{ display: flex; flex-direction: column; }}
+.wr-compare .track {{ height: 30px; border-radius: 10px; background: {t.PAPER}; }}
+.wr-compare .track i {{ display: block; height: 100%; border-radius: 10px; }}
+.wr-compare .v {{ font-family: "{t.SERIF}", serif; font-size: 22px; text-align: right; }}
+@media (max-width: 640px) {{
+  .wr-savings {{ grid-template-columns: 1fr; }}
+  .wr-compare .row {{ grid-template-columns: 1fr 90px; }}
+  .wr-compare .track {{ grid-column: 1 / -1; order: 3; }}
+}}
 .wr-hidden {{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
               white-space: nowrap; }}
 @media (max-width: 640px) {{

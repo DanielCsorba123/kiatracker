@@ -89,24 +89,6 @@ def test_predicted_vs_actual_has_equal_axes_and_a_diagonal():
     assert diagonal["mark"]["type"] == "line" and diagonal["mark"]["strokeDash"]
 
 
-def test_grouped_bars_keep_series_colours_fixed_and_show_a_legend():
-    df = pd.DataFrame(
-        {
-            "month": ["2026-10", "2026-10", "2026-11"],
-            "series": ["EV", "Petrol car", "EV"],
-            "value": [5000.0, 30000.0, 6000.0],
-        }
-    )
-    spec = charts.grouped_bar(
-        df, "month", "series", "value", "Monthly cost", "Ft", ["EV", "Petrol car", "Diesel car"]
-    )
-    enc = spec.to_dict()["encoding"]
-    assert enc["color"]["scale"]["domain"] == ["EV", "Petrol car", "Diesel car"]
-    assert enc["color"]["scale"]["range"][:3] == [charts.SKY, charts.CORAL, charts.PALE]
-    assert "legend" not in enc["color"] or enc["color"]["legend"] is not None
-    assert "tooltip" in enc and "xOffset" in enc
-
-
 DRIVES = pd.DataFrame(
     {
         "temp_c": [-2.0, 4.0, 12.0],
@@ -156,9 +138,6 @@ def all_charts():
     yield charts.predicted_vs_actual(pd.DataFrame({"predicted": [1.0, 2.0], "actual": [1.5, 2.5]}), "kWh")
     yield charts.bar_with_interval(
         pd.DataFrame({"d": ["a"], "v": [1.0], "l": [0.5], "h": [1.5]}), "d:O", "v", "l", "h", "t", "km"
-    )
-    yield charts.grouped_bar(
-        pd.DataFrame({"m": ["x"], "s": ["EV"], "v": [1.0]}), "m", "s", "v", "t", "Ft", ["EV"]
     )
 
 
@@ -278,3 +257,16 @@ def test_histogram_takes_a_colour():
     assert charts.CORAL in str(
         charts.histogram(df, "soc", None, 10, "Battery %", (0, 100), colour=charts.CORAL).to_dict()
     )
+
+
+def test_savings_bars_highlight_the_last_complete_bucket():
+    df = pd.DataFrame(
+        {
+            "bucket": ["2026-09", "2026-10", "2026-11"],
+            "saved_huf": [55000.0, 60000.0, 20000.0],
+            "complete": [True, True, False],
+        }
+    )
+    spec = charts.savings_bars(df).to_dict()
+    text = str(spec)
+    assert charts.CORAL in text and charts.PALE in text and "60k" in text
