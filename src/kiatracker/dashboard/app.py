@@ -2,14 +2,14 @@
 `kiatracker dashboard --demo`. Started any other way, e.g. `streamlit run`, it shows demo data only.
 """
 
-from datetime import date, timedelta
+from datetime import date
 
 import streamlit as st
 
 from kiatracker.config import load_settings
 from kiatracker.dashboard.queries import Period, connect
 from kiatracker.dashboard.source import build_demo_database, may_show_personal, resolve_source
-from kiatracker.dashboard.ui import BRAND, LOGO, inject_style, sidebar_brand
+from kiatracker.dashboard.ui import BRAND, LOGO, demo_strip, inject_style, period_control
 from kiatracker.dashboard.views import charging, costs, drives, overview, routes
 from kiatracker.dashboard.views import range as range_page
 from kiatracker.showcase import load_status
@@ -65,7 +65,7 @@ def main() -> None:
     source = resolve_source(load_settings().db_path)
     if source.demo:
         db_path = demo_database()
-        st.info(demo_banner(load_status()), icon=":material/science:")
+        demo_strip(demo_banner(load_status()))
     elif not may_show_personal(st.get_option("server.address")):
         st.error("Personal data is only shown when the dashboard listens on this computer alone (127.0.0.1).")
         st.stop()
@@ -77,24 +77,18 @@ def main() -> None:
         )
         st.stop()
 
-    today = date.today()
-    default_days = 365 if source.demo else 30  # the demo has a whole year to show
-    picked = st.sidebar.date_input("Period", (today - timedelta(days=default_days), today), max_value=today)
-    start, end = (picked[0], picked[-1]) if isinstance(picked, tuple) and picked else (today, today)
-    period = Period(start, end)
-    st.sidebar.caption("Times are local (Europe/Budapest). Places are shown as home / other only.")
-    sidebar_brand()
+    st.logo(str(LOGO), size="large")
+    period = period_control(365 if source.demo else 30)  # the demo has a whole year to show
 
     pages = [
         st.Page(
             page_runner(module, db_path, period),
             title=title,
-            icon=icon,
             url_path=module.__name__.split(".")[-1],
         )
-        for module, title, icon in PAGES
+        for module, title, _icon in PAGES
     ]
-    st.navigation(pages).run()
+    st.navigation(pages, position="top").run()
 
 
 main()
