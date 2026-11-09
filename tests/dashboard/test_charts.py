@@ -260,3 +260,21 @@ def test_drives_over_year_colours_costly_drives():
     )
     spec = str(charts.drives_over_year(df).to_dict())
     assert charts.CORAL in spec and charts.SKY in spec and "loess" in spec
+
+
+def test_plug_hours_chart_marks_the_peak_in_sun():
+    df = pd.DataFrame({"hour": range(24), "sessions": [0] * 17 + [5, 9, 8, 6] + [0] * 3})
+    spec = str(charts.plug_hours(df).to_dict())
+    assert charts.theme.SUN in spec and charts.PALE in spec
+
+
+def test_bar_can_highlight_the_last_bar():
+    spec = str(charts.bar(DF, "week:T", "km:Q", None, "km", highlight_last=True).to_dict())
+    assert charts.CORAL in spec and charts.PALE in spec
+
+
+def test_histogram_takes_a_colour():
+    df = pd.DataFrame({"soc": [10, 20, 80]})
+    assert charts.CORAL in str(
+        charts.histogram(df, "soc", None, 10, "Battery %", (0, 100), colour=charts.CORAL).to_dict()
+    )

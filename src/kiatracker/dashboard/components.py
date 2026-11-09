@@ -304,3 +304,63 @@ def drive_list(df) -> str:
     if current is not None:
         out.append("</div>")
     return f'<div class="wr-drives">{"".join(out)}</div>'
+
+
+def peak_window(df, hours: int = 4) -> tuple[int, int, float]:
+    """The busiest `hours`-long window of plug-in times: (start hour, end hour exclusive, share)."""
+    counts = list(df["sessions"])
+    total = sum(counts)
+    start = max(range(24 - hours + 1), key=lambda h: sum(counts[h : h + hours]))
+    return start, start + hours, (sum(counts[start : start + hours]) / total if total else 0.0)
+
+
+def peak_sentence(df) -> str:
+    start, end, share = peak_window(df)
+    until = "midnight" if end == 24 else f"{end}:00"
+    if share >= 0.995:
+        words = "All of your sessions"
+    elif share > 0.5:
+        words = "More than half of your sessions"
+    elif 0.28 <= share <= 0.4:
+        words = "About a third of your sessions"
+    else:
+        words = f"{share:.0%} of your sessions"
+    return (
+        f"{words} start between {start}:00 and {until}. If your tariff has a cheaper night rate, a charging "
+        "timer for 22:00 would use it."
+    )
+
+
+def typical_charge(start_median: float, end_median: float) -> str:
+    """A battery bar from the median plug-in level to the median stop level."""
+    a, b = max(0.0, min(100.0, start_median)), max(0.0, min(100.0, end_median))
+    return (
+        '<div class="wr-charge"><div class="bat">'
+        f'<i class="before" style="width: {a:.0f}%"></i>'
+        f'<i class="added" style="left: {a:.0f}%; width: {max(0.0, b - a):.0f}%"></i>'
+        f'<span style="left: calc({a:.0f}% + 14px)">+{b - a:.0f} % per session, typically</span></div>'
+        f'<div class="marks"><span>0 %</span><span style="left: {a:.0f}%">plug in at {a:.0f} %</span>'
+        f'<span style="left: {b:.0f}%">stop at {b:.0f} %</span><span class="end">100 %</span></div></div>'
+    )
+
+
+def session_list(df, n: int = 5) -> str:
+    """The latest sessions: date, time, where, a from → to bar (coral for fast charging), kWh and kW."""
+    rows = []
+    for r in df.head(n).itertuples():
+        fast = _known(r.avg_kw) and r.avg_kw > 22
+        a = r.soc_start if _known(r.soc_start) else 0
+        b = r.soc_end if _known(r.soc_end) else a
+        kw = f"{r.avg_kw:.1f}".removesuffix(".0") + " kW" if _known(r.avg_kw) else ""
+        kwh = f"{r.energy_kwh:.1f} kWh" if _known(r.energy_kwh) else ""
+        rows.append(
+            f'<div class="row"><span class="wr-note">{r.start_local:%a} {r.start_local.day} '
+            f"{r.start_local:%b}</span>"
+            f'<span class="wr-note">{r.start_local:%H:%M}</span><b>{e(str(r.zone or "").capitalize())}</b>'
+            f'<span class="soc"><span class="wr-note">{a:.0f}%</span><span class="track">'
+            f'<i style="left: {a:.0f}%; width: {max(0, b - a):.0f}%; '
+            f'background: {theme.CORAL if fast else theme.SKY}"></i></span>'
+            f'<span class="wr-note">{b:.0f}%</span></span><span class="r">{kwh}</span>'
+            f'<span class="r wr-note">{kw}</span></div>'
+        )
+    return f'<div class="wr-sessions">{"".join(rows)}</div>'

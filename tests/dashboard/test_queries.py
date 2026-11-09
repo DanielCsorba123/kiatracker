@@ -236,3 +236,13 @@ def test_recent_drives_label_days(tiny):
     df = q.recent_drives(tiny(), today=date(2026, 11, 10))
     assert list(df["day_label"]) == ["Today", "Tue 3 Nov"]
     assert {"time", "start_zone", "end_zone", "distance_km", "kwh_per_100km", "temp_c"} <= set(df.columns)
+
+
+def test_plug_hours_has_all_24_hours(demo, all_time):
+    df = q.plug_hours(demo, all_time)
+    assert list(df["hour"]) == list(range(24))
+    assert df["sessions"].sum() == len(q.charging_sessions(demo, all_time))
+
+
+def test_plug_hours_empty(empty, all_time):
+    assert q.plug_hours(empty, all_time)["sessions"].sum() == 0

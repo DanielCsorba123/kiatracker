@@ -193,3 +193,59 @@ def test_drive_list_escapes_zone_names_and_groups_days():
     out = components.drive_list(df)
     assert "<b>" not in out and out.count("Today") == 1 and "18.9 kWh/100" in out
     assert "wr-chip coral" not in out.split("17:20")[1] and "wr-chip sky" in out
+
+
+def test_peak_window_finds_the_busiest_four_hours():
+    df = pd.DataFrame({"hour": range(24), "sessions": [0] * 17 + [5, 9, 8, 6] + [0] * 3})
+    start, end, share = components.peak_window(df)
+    assert (start, end) == (17, 21) and share == 1.0
+    assert "All of your sessions start between 17:00 and 21:00" in components.peak_sentence(df)
+
+
+def test_peak_sentence_wording():
+    df = pd.DataFrame({"hour": range(24), "sessions": [1] * 17 + [6, 6, 6, 6] + [1] * 3})
+    assert components.peak_sentence(df).startswith("More than half of your sessions")
+
+
+def test_typical_charge_bar():
+    out = components.typical_charge(34.6, 80.2)
+    assert "+46 % per session, typically" in out and "plug in at 35 %" in out and "stop at 80 %" in out
+
+
+def test_session_list_marks_fast_charges():
+    df = pd.DataFrame(
+        [
+            dict(
+                start_local=pd.Timestamp("2026-10-31 13:22"),
+                zone="other",
+                soc_start=12,
+                soc_end=78,
+                energy_kwh=51.6,
+                avg_kw=96.0,
+            ),
+            dict(
+                start_local=pd.Timestamp("2026-11-08 18:12"),
+                zone="<i>home</i>",
+                soc_start=34,
+                soc_end=80,
+                energy_kwh=36.1,
+                avg_kw=7.4,
+            ),
+        ]
+    )
+    out = components.session_list(df)
+    assert components.theme.CORAL in out and components.theme.SKY in out and "<i>" not in out
+    assert "Sat 31 Oct" in out and "51.6 kWh" in out and "96 kW" in out
+
+
+def test_peak_sentence_says_midnight():
+    df = pd.DataFrame({"hour": range(24), "sessions": [0] * 20 + [5, 9, 8, 6]})
+    assert "between 20:00 and midnight" in components.peak_sentence(df)
+
+
+def test_common_bins_never_pass_100():
+    from kiatracker.dashboard.views.charging import common_bins
+
+    assert (
+        common_bins(pd.Series([82.0, 88.0, 100.0, 100.0, 100.0])) == "between 90 and 100 %"
+    )  # like the chart

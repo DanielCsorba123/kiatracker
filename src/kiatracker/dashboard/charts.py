@@ -101,12 +101,32 @@ def _tip(field: str, title: str | None = None):
 
 @styled
 def bar(
-    df: pd.DataFrame, x: str, y: str, title: str, y_title: str, color: str = SKY, x_title=None
+    df: pd.DataFrame,
+    x: str,
+    y: str,
+    title: str | None,
+    y_title: str,
+    color: str = SKY,
+    x_title=None,
+    highlight_last: bool = False,
 ) -> alt.Chart:
+    """One series of bars; `highlight_last` draws the latest bar in coral and the rest in pale."""
+    field = x.split(":")[0]
+    data = df.assign(_last=df[field] == df[field].max()) if highlight_last and not df.empty else df
+    colour = (
+        alt.condition("datum._last", alt.value(CORAL), alt.value(PALE))
+        if highlight_last
+        else alt.value(color)
+    )
     return (
-        _base(df, title)
-        .mark_bar(color=color, cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
-        .encode(x=_x(x, x_title), y=alt.Y(y, title=y_title), tooltip=[_tip(x, x_title), _tip(y, y_title)])
+        _base(data, title)
+        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+        .encode(
+            x=_x(x, x_title),
+            y=alt.Y(y, title=y_title),
+            color=colour,
+            tooltip=[_tip(x, x_title), _tip(y, y_title)],
+        )
     )
 
 
@@ -383,12 +403,13 @@ def histogram(
     step: float,
     x_title: str | None = None,
     extent: tuple[float, float] | None = None,
+    colour: str = SKY,
 ) -> alt.Chart:
     bins = alt.Bin(step=step, extent=list(extent)) if extent else alt.Bin(step=step)
     scale = alt.Scale(domain=list(extent)) if extent else alt.Undefined
     return (
         _base(df, title)
-        .mark_bar(color=SKY, cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+        .mark_bar(color=colour, cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
         .encode(
             x=alt.X(f"{column}:Q", bin=bins, scale=scale, title=x_title or column, axis=alt.Axis(format="d")),
             y=alt.Y("count():Q", title="Sessions"),
@@ -512,3 +533,26 @@ def drives_over_year(df: pd.DataFrame) -> alt.LayerChart:
         .encode(y="kwh_per_100km:Q")
     )
     return (dots + trend).properties(height=HEIGHT - 50)
+
+
+@styled
+def plug_hours(df: pd.DataFrame) -> alt.Chart:
+    """Sessions by local start hour; the busiest four hours in sun yellow. Columns: hour, sessions."""
+    total = df["sessions"].tolist()
+    start = max(range(21), key=lambda h: sum(total[h : h + 4]))
+    data = df.assign(peak=df["hour"].between(start, start + 3))
+    return (
+        alt.Chart(data)
+        .mark_bar()
+        .encode(
+            x=alt.X(
+                "hour:O",
+                title=None,
+                axis=alt.Axis(labelAngle=0, labelExpr="datum.value % 3 ? '' : datum.value"),
+            ),
+            y=alt.Y("sessions:Q", title=None, axis=None),
+            color=alt.condition("datum.peak", alt.value(theme.SUN), alt.value(PALE)),
+            tooltip=[alt.Tooltip("hour:O", title="Hour"), alt.Tooltip("sessions:Q", title="Sessions")],
+        )
+        .properties(height=130)
+    )

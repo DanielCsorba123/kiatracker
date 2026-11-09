@@ -166,6 +166,28 @@ h1, h2, h3 {{ font-family: "{t.SERIF}", serif; font-weight: 400; letter-spacing:
   .wr-drives-day .row {{ grid-template-columns: 48px minmax(0, 1fr) 70px; }}
   .wr-drives-day .row .tag, .wr-drives-day .row > :last-child {{ display: none; }}
 }}
+.wr-charge {{ display: flex; flex-direction: column; gap: 10px; }}
+.wr-charge .bat {{ position: relative; height: 44px; border-radius: 999px; background: {t.WASH};
+                   overflow: hidden; }}
+.wr-charge .bat i {{ position: absolute; top: 0; bottom: 0; left: 0; }}
+.wr-charge .bat .before {{ background: #DCE8F3; }}
+.wr-charge .bat .added {{ background: linear-gradient(90deg, {t.SKY}, #7FB5DB); }}
+.wr-charge .bat span {{ position: absolute; top: 12px; font-size: 14px; color: {t.CARD}; font-weight: 600; }}
+.wr-charge .marks {{ position: relative; height: 18px; font-size: 13px; color: {t.MUTED}; }}
+.wr-charge .marks span {{ position: absolute; transform: translateX(-50%); white-space: nowrap; }}
+.wr-charge .marks span:first-child {{ transform: none; left: 0; }}
+.wr-charge .marks .end {{ right: 0; transform: none; }}
+.wr-sessions .row {{ display: grid; grid-template-columns: 110px 60px minmax(0, 1fr) 220px 80px 70px;
+                     gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid {t.RULE}; }}
+.wr-sessions .soc {{ display: flex; align-items: center; gap: 8px; }}
+.wr-sessions .track {{ position: relative; flex: 1; height: 8px; border-radius: 999px;
+                       background: {t.WASH}; }}
+.wr-sessions .track i {{ position: absolute; top: 0; bottom: 0; border-radius: 999px; }}
+.wr-sessions .r {{ text-align: right; }}
+@media (max-width: 640px) {{
+  .wr-sessions .row {{ grid-template-columns: 90px minmax(0, 1fr) 70px; }}
+  .wr-sessions .row > :nth-child(2), .wr-sessions .soc, .wr-sessions .row > :last-child {{ display: none; }}
+}}
 .wr-hidden {{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
               white-space: nowrap; }}
 @media (max-width: 640px) {{

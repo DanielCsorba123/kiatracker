@@ -480,3 +480,10 @@ def recent_drives(con, today: date, n: int = 8) -> pd.DataFrame:
     d["day_label"] = [day_label(ts.date(), today) for ts in d["start_local"]]
     d["time"] = [f"{ts:%H:%M}" for ts in d["start_local"]]
     return d[["day_label", "time", "start_zone", "end_zone", "distance_km", "kwh_per_100km", "temp_c"]]
+
+
+def plug_hours(con, period: Period) -> pd.DataFrame:
+    """Finished charging sessions by local start hour, all 24 hours present."""
+    s = _sessions(con, period)
+    counts = s["start_local"].dt.hour.value_counts() if not s.empty else pd.Series(dtype=int)
+    return pd.DataFrame({"hour": range(24), "sessions": [int(counts.get(h, 0)) for h in range(24)]})
