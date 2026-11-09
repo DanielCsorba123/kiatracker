@@ -79,3 +79,24 @@ def empty_db_path(tmp_path):
     settings = Settings(None, None, tmp_path / "empty", home=None)
     build_database(settings)
     return settings.db_path
+
+
+@pytest.fixture
+def sessions_db(tmp_path):
+    """Factory: an empty database plus finished charging sessions with the given end % and average kW."""
+
+    def make(ends: list[float], kw: list[float]):
+        settings = Settings(None, None, tmp_path / "sessions", home=None)
+        build_database(settings)
+        con = duckdb.connect(str(settings.db_path))
+        for n, (end, power) in enumerate(zip(ends, kw, strict=True)):
+            con.execute(
+                "insert into charging_sessions (session_id, start_ts, end_ts, soc_start, soc_end, "
+                "energy_kwh, hours, avg_kw, zone, in_progress) "
+                "values (?, ?, ?, 30, ?, 20, 3, ?, 'home', false)",
+                [n, f"2026-10-{n + 1:02d} 19:00", f"2026-10-{n + 1:02d} 22:00", end, power],
+            )
+        con.close()
+        return connect(settings.db_path)
+
+    return make

@@ -56,6 +56,8 @@ class ForecastHour:
     temp_c: float | None
     wind_kph: float | None
     wind_dir_deg: float | None
+    cloud_pct: float | None = None
+    rain_prob_pct: float | None = None
 
 
 @dataclass(frozen=True)
@@ -78,12 +80,14 @@ def forecast_hours(raw_dir: Path) -> list[ForecastHour]:
         return hourly.get(name) or [None] * len(hourly.get("time") or [])
 
     return [
-        ForecastHour(datetime.fromisoformat(t).replace(tzinfo=UTC), temp, wind, direction)
-        for t, temp, wind, direction in zip(
+        ForecastHour(datetime.fromisoformat(t).replace(tzinfo=UTC), temp, wind, direction, cloud, rain)
+        for t, temp, wind, direction, cloud, rain in zip(
             hourly.get("time") or [],
             column("temperature_2m"),
             column("wind_speed_10m"),
             column("wind_direction_10m"),
+            column("cloud_cover"),
+            column("precipitation_probability"),
             strict=True,
         )
     ]

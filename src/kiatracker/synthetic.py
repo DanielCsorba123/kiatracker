@@ -67,7 +67,15 @@ class DayWeather:
             "wind_speed_10m": [w for _, w in hours],
             "wind_direction_10m": [round(self.wind_from, 1)] * 24,
             "wind_gusts_10m": [round(self.wind * 1.6, 1)] * 24,
+            "cloud_cover": [self.cloud] * 24,
+            "precipitation_probability": [max(0.0, min(80.0, self.cloud - 35))] * 24,
         }
+
+    @property
+    def cloud(self) -> float:
+        """Cloud cover %: windier and colder days are greyer; deterministic, so the demo stays repeatable."""
+        swing = 15 * math.sin(math.radians(self.wind_from))
+        return float(round(min(90.0, max(10.0, 30 + 2.2 * self.wind - 1.2 * self.temp + swing))))
 
 
 def fake_elevation(lat: float, lon: float) -> float:

@@ -4,6 +4,7 @@ No Streamlit here, so it is unit-tested directly. Queries select zones, never co
 Database timestamps are naive UTC; results are converted to local wall-clock time.
 """
 
+import statistics
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -284,3 +285,42 @@ def condition_effects(con, period: Period) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(rows)
+
+
+@dataclass(frozen=True)
+class UsualCharge:
+    level: int  # %
+    sessions: int  # slow sessions it was learned from
+    at_level: int  # of those, how many ended at `level`
+    assumed: bool  # too few sessions: 80 % is assumed
+
+
+USUAL_FALLBACK = 80
+USUAL_LOOKBACK = 20
+USUAL_MIN_SESSIONS = 5
+FAST_KW = 22.0  # above this a session is DC fast charging, which says nothing about the daily habit
+
+
+def usual_charge_level(con, latest_soc: float | None) -> UsualCharge:
+    """The level you usually charge to: the median end of the last 20 slow sessions, rounded to 5 %.
+
+    Fewer than 5 sessions: 80 %, marked assumed. Never below the latest reading, never above 100 %."""
+    ends: list[float] = []
+    if has_table(con, "charging_sessions"):
+        ends = [
+            end
+            for (end,) in con.execute(
+                "select soc_end from charging_sessions where not in_progress and soc_end is not null "
+                "and (avg_kw is null or avg_kw <= ?) order by start_ts desc limit ?",
+                [FAST_KW, USUAL_LOOKBACK],
+            ).fetchall()
+        ]
+    rounded = [int(5 * round(end / 5)) for end in ends]
+    if len(rounded) < USUAL_MIN_SESSIONS:
+        level, at_level, assumed = USUAL_FALLBACK, 0, True
+    else:
+        level = int(5 * round(statistics.median(ends) / 5))
+        at_level, assumed = rounded.count(level), False
+    if latest_soc is not None:
+        level = max(level, round(latest_soc))
+    return UsualCharge(min(level, 100), len(rounded), at_level, assumed)

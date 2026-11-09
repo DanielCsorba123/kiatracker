@@ -158,3 +158,25 @@ def test_condition_effects_say_when_there_is_not_enough_data(tiny):
     with tiny() as con:
         effects = q.condition_effects(con, Period(date(2026, 11, 1), date(2026, 11, 30)))
     assert not effects["enough"].any()
+
+
+def test_usual_level_is_median_of_slow_sessions_rounded(sessions_db):
+    con = sessions_db(ends=[79, 80, 81, 80, 78, 100], kw=[7.4] * 6)
+    u = q.usual_charge_level(con, latest_soc=40)
+    assert (u.level, u.assumed, u.sessions) == (80, False, 6) and u.at_level == 5
+
+
+def test_dc_sessions_are_ignored_and_few_sessions_fall_back(sessions_db):
+    con = sessions_db(ends=[100, 100, 90, 80], kw=[96, 88, 7.4, 7.4])
+    u = q.usual_charge_level(con, latest_soc=40)
+    assert (u.level, u.assumed) == (80, True)
+
+
+def test_usual_level_never_below_latest_reading(sessions_db):
+    con = sessions_db(ends=[80] * 6, kw=[7.4] * 6)
+    assert q.usual_charge_level(con, latest_soc=95).level == 95
+
+
+def test_usual_level_on_an_empty_database(empty):
+    u = q.usual_charge_level(empty, latest_soc=None)
+    assert (u.level, u.assumed, u.sessions) == (80, True, 0)

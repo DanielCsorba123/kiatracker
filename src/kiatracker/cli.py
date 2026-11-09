@@ -232,7 +232,8 @@ def cmd_forecast(settings: Settings, args) -> int:
 
     print(f"Battery {km(soc)}%, typical speed {speed:.0f} km/h. Daytime range by day:")
 
-    for day in daily_outlook(hourly, model, soc, capacity, speed, datetime.now(LOCAL).date()):
+    # the CLI reads no database, so every day starts from the current charge
+    for day in daily_outlook(hourly, model, soc, soc, capacity, speed, datetime.now(LOCAL).date()):
         print(
             f"  {day['day']:%a %d %b}: {day['temp_c']:.0f} °C, wind {day['wind_kph']:.0f} km/h -> "
             f"{km(day['range_km'])} km ({km(day['range_lo'])}-{km(day['range_hi'])})"

@@ -27,14 +27,18 @@ def cached_train(key: tuple, _con) -> Trained:
 def forecast_hourly(con) -> dict | None:
     """The forecast table in the shape the outlook expects."""
     rows = con.execute(
-        "select ts, temp_c, wind_kph, wind_dir_deg from forecast_hourly order by ts"
+        "select ts, temp_c, wind_kph, wind_dir_deg, cloud_pct, rain_prob_pct from forecast_hourly order by ts"
     ).fetchall()
     if not rows:
         return None
+    columns = list(zip(*rows, strict=True))
     return {
-        "time": [ts.strftime("%Y-%m-%dT%H:%M") for ts, *_ in rows],
-        "temperature_2m": [t for _, t, _, _ in rows],
-        "wind_speed_10m": [w for _, _, w, _ in rows],
+        "time": [ts.strftime("%Y-%m-%dT%H:%M") for ts in columns[0]],
+        "temperature_2m": list(columns[1]),
+        "wind_speed_10m": list(columns[2]),
+        "wind_direction_10m": list(columns[3]),
+        "cloud_cover": list(columns[4]),
+        "precipitation_probability": list(columns[5]),
     }
 
 
@@ -91,7 +95,9 @@ def render(con, period: queries.Period) -> None:
     )
 
     st.subheader("Next days")
-    outlook = daily_outlook(hourly, model, soc, capacity, speed, datetime.now(LOCAL).date()) if hourly else []
+    usual = queries.usual_charge_level(con, soc)
+    today = datetime.now(LOCAL).date()
+    outlook = daily_outlook(hourly, model, soc, usual.level, capacity, speed, today) if hourly else []
     if outlook and outlook[0]["range_km"] is not None:
         days = pd.DataFrame(outlook)
         days["label"] = [f"{d:%a %d %b}" for d in days["day"]]

@@ -151,4 +151,29 @@ def test_latest_forecast_becomes_an_hourly_table_without_location(tmp_path):
             ).fetchall()
         ]
         temps = {t for (t,) in con.execute("select temp_c from forecast_hourly").fetchall()}
-    assert columns == ["ts", "temp_c", "wind_kph", "wind_dir_deg"] and temps == {5.0}
+    assert columns == ["ts", "temp_c", "wind_kph", "wind_dir_deg", "cloud_pct", "rain_prob_pct"]
+    assert temps == {5.0}
+
+
+def test_forecast_hours_read_cloud_and_rain_when_present(tmp_path):
+    from kiatracker.db import forecast_hours
+    from kiatracker.raw import append_record
+
+    hourly = {
+        "time": ["2026-11-03T00:00"],
+        "temperature_2m": [1.0],
+        "wind_speed_10m": [5.0],
+        "wind_direction_10m": [90.0],
+        "cloud_cover": [80.0],
+        "precipitation_probability": [40.0],
+    }
+    record = {
+        "fetched_at": at(0).isoformat(),
+        "endpoint": "open-meteo-forecast",
+        "key": {},
+        "http_status": 200,
+        "body": {"hourly": hourly},
+    }
+    append_record(tmp_path, "forecast", record, at(0))
+    [row] = forecast_hours(tmp_path)
+    assert (row.cloud_pct, row.rain_prob_pct) == (80.0, 40.0)
