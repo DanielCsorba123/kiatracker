@@ -1,8 +1,6 @@
 import tomllib
 from pathlib import Path
 
-import pytest
-
 from kiatracker.dashboard import charts, theme
 
 CONFIG = Path(__file__).parents[2] / ".streamlit" / "config.toml"
@@ -34,7 +32,6 @@ def test_fonts_are_self_hosted():
     assert (static / "young-serif.woff2").exists() and (static / "hanken-grotesk-var.woff2").exists()
 
 
-@pytest.mark.xfail(strict=True, reason="charts move to theme tokens in Task 4")
 def test_charts_use_theme_tokens():
     assert charts.MUTED == theme.MUTED
 

@@ -22,7 +22,7 @@ def test_bar_has_tooltip_one_axis_and_brand_color():
     chart = charts.bar(DF, "week:T", "km:Q", "Distance per week", "km")
     enc = encodings(chart)
     assert "tooltip" in enc and "y" in enc and "y2" not in enc
-    assert charts.BLUE in str(chart.to_dict())
+    assert charts.SKY in str(chart.to_dict())
 
 
 def test_line_has_points_and_tooltip():
@@ -102,7 +102,7 @@ def test_grouped_bars_keep_series_colours_fixed_and_show_a_legend():
     )
     enc = spec.to_dict()["encoding"]
     assert enc["color"]["scale"]["domain"] == ["EV", "Petrol car", "Diesel car"]
-    assert enc["color"]["scale"]["range"][:3] == [charts.BLUE, charts.ORANGE, charts.AQUA]
+    assert enc["color"]["scale"]["range"][:3] == [charts.SKY, charts.CORAL, charts.PALE]
     assert "legend" not in enc["color"] or enc["color"]["legend"] is not None
     assert "tooltip" in enc and "xOffset" in enc
 
@@ -165,10 +165,10 @@ def all_charts():
 def test_every_chart_wears_the_house_style():
     for chart in all_charts():
         config = chart.to_dict()["config"]
-        assert config["font"] == "Inter"
-        assert config["title"]["font"] == "Space Grotesk"
+        assert config["font"] == "Hanken Grotesk"
+        assert config["title"]["font"] == "Young Serif"
         assert config["view"]["stroke"] is None
-        assert config["axis"]["domain"] is False and config["axis"]["gridDash"]
+        assert config["axis"]["domain"] is False and config["axis"]["gridColor"] == charts.theme.RULE
 
 
 def test_trend_line_has_a_gradient_area_under_it():
@@ -197,8 +197,8 @@ def test_effect_bars_grey_out_factors_without_enough_drives():
     spec = charts.effect_bars(EFFECTS).to_dict()
     bars = spec["layer"][0]
     assert bars["mark"]["type"] == "bar" and "tooltip" in bars["encoding"]
-    assert bars["encoding"]["color"]["condition"]["value"] == charts.ORANGE  # enough data: brand accent
-    assert spec["config"]["font"] == "Inter"
+    assert bars["encoding"]["color"]["condition"]["value"] == charts.CORAL  # enough data: brand accent
+    assert spec["config"]["font"] == "Hanken Grotesk"
 
 
 def test_range_heatmap_labels_every_cell_in_km():
@@ -230,3 +230,9 @@ def test_route_profile_has_one_colour_per_route():
     profile = pd.DataFrame({"route": ["A", "A", "B", "B"], "km": [0, 1, 0, 1], "kwh": [0, 0.2, 0, 0.3]})
     spec = charts.route_profile(profile, "kwh", "Energy", "kWh").to_dict()
     assert spec["encoding"]["color"]["scale"]["domain"] == ["A", "B"]
+
+
+def test_house_uses_tokens_and_no_title():
+    spec = charts.bar(DF, "week:T", "km:Q", None, "km").to_dict()
+    assert spec["config"]["font"] == "Hanken Grotesk" and "title" not in spec
+    assert spec["config"]["axis"]["gridColor"] == charts.theme.RULE

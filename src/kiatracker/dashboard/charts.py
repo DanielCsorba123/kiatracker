@@ -10,40 +10,44 @@ import functools
 import altair as alt
 import pandas as pd
 
+from kiatracker.dashboard import theme
 from kiatracker.route_energy import CAUSES
 
-BLUE = "#2a78d6"  # categorical slot 1
-ORANGE = "#eb6834"  # categorical slot 2, for a second series when one is needed
-AQUA = "#1baf7a"  # categorical slot 3; the first three slots stay distinguishable for colour-blind readers
-INK = "#8a8985"  # whiskers: mid grey reads on both the light and the dark surface
-REFERENCE = "#9a9994"  # reference lines such as the perfect-prediction diagonal
+SKY = theme.SKY  # the main series
+CORAL = theme.CORAL  # the one highlight per chart, or a second series
+PALE = theme.PALE  # secondary bars
+WHISKER = theme.MUTED  # interval whiskers
+REFERENCE = theme.CORAL  # reference lines such as the perfect-prediction diagonal
 HEIGHT = 280
-MUTED = "#8a8985"  # axis labels and grid: mid grey reads on both the light and the dark surface
+MUTED = theme.MUTED  # axis labels
 
 
 def house(chart):
-    """Windrose look: brand fonts, recessive dashed grid, no frame or axis lines, generous title spacing."""
+    """Morning look: Hanken Grotesk, a quiet solid grid, no frame or axis lines, rounded bar ends.
+    Section titles are HTML around the chart, so charts carry no title of their own."""
     return (
-        chart.configure(font="Inter")
+        chart.configure(font=theme.SANS)
         .configure_view(stroke=None)
         .configure_axis(
             domain=False,
             ticks=False,
             labelColor=MUTED,
-            labelFontSize=11,
+            labelFontSize=12,
             labelPadding=8,
             titleColor=MUTED,
-            titleFontSize=11,
+            titleFontSize=12,
             titleFontWeight=500,
             titlePadding=12,
-            gridColor=MUTED,
-            gridOpacity=0.22,
-            gridDash=[2, 4],
+            gridColor=theme.RULE,
+            gridOpacity=1,
         )
-        .configure_title(font="Space Grotesk", fontSize=16, fontWeight=600, anchor="start", offset=14)
+        .configure_title(
+            font=theme.SERIF, fontSize=18, fontWeight=400, anchor="start", offset=14, color=theme.INK
+        )
+        .configure_bar(cornerRadiusEnd=6)
         .configure_legend(
-            labelFont="Inter",
-            titleFont="Inter",
+            labelFont=theme.SANS,
+            titleFont=theme.SANS,
             labelColor=MUTED,
             titleColor=MUTED,
             symbolType="circle",
@@ -62,8 +66,12 @@ def styled(builder):
     return wrapper
 
 
-def _base(df: pd.DataFrame, title: str) -> alt.Chart:
-    return alt.Chart(df, title=alt.Title(title, anchor="start")).properties(height=HEIGHT)
+def _title(title: str | None):
+    return alt.Title(title, anchor="start") if title else alt.Undefined
+
+
+def _base(df: pd.DataFrame, title: str | None) -> alt.Chart:
+    return alt.Chart(df, title=_title(title)).properties(height=HEIGHT)
 
 
 def _x(field: str, title: str | None):
@@ -93,7 +101,7 @@ def _tip(field: str, title: str | None = None):
 
 @styled
 def bar(
-    df: pd.DataFrame, x: str, y: str, title: str, y_title: str, color: str = BLUE, x_title=None
+    df: pd.DataFrame, x: str, y: str, title: str, y_title: str, color: str = SKY, x_title=None
 ) -> alt.Chart:
     return (
         _base(df, title)
@@ -109,7 +117,7 @@ def predicted_vs_actual(df: pd.DataFrame, unit: str) -> alt.LayerChart:
     domain = [float(values.min()), float(values.max())]
     scale = alt.Scale(domain=domain, zero=False)
     base = _base(df, "Predicted vs actual consumption")
-    points = base.mark_circle(color=BLUE, size=70, opacity=0.75, strokeWidth=0).encode(
+    points = base.mark_circle(color=SKY, size=70, opacity=0.75, strokeWidth=0).encode(
         x=alt.X("predicted:Q", title=f"Predicted {unit}", scale=scale),
         y=alt.Y("actual:Q", title=f"Actual {unit}", scale=scale),
         tooltip=[_tip("predicted:Q", "Predicted"), _tip("actual:Q", "Actual")],
@@ -128,7 +136,7 @@ def grouped_bar(
     df: pd.DataFrame, x: str, series: str, y: str, title: str, y_title: str, order: list[str]
 ) -> alt.Chart:
     """Bars side by side per x value; each series keeps its colour whatever is filtered (legend shown)."""
-    colors = alt.Scale(domain=order, range=[BLUE, ORANGE, AQUA][: len(order)])
+    colors = alt.Scale(domain=order, range=[SKY, CORAL, PALE][: len(order)])
     return (
         _base(df, title)
         .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
@@ -161,10 +169,10 @@ def points_with_bands(
     """Every drive as a dot, with each band's distance-weighted average drawn across the band."""
     lo, hi = float(drives[x].min()), float(drives[x].max())
     lines = bands.assign(x_lo=bands["lo"].clip(lower=lo), x_hi=bands["hi"].clip(upper=hi))  # catch-all edges
-    chart_title = alt.Title(title, anchor="start")  # explain dots and lines in a themed caption, not here
+    chart_title = _title(title)  # explain dots and lines in a themed caption, not here
     points = (
         alt.Chart(drives, title=chart_title)
-        .mark_circle(color=BLUE, size=70, opacity=0.65)
+        .mark_circle(color=SKY, size=70, opacity=0.65)
         .encode(
             x=alt.X(f"{x}:Q", title=x_title, scale=alt.Scale(zero=False)),
             y=alt.Y(f"{y}:Q", title=y_title, scale=alt.Scale(zero=False)),
@@ -178,7 +186,7 @@ def points_with_bands(
     )
     averages = (
         alt.Chart(lines)
-        .mark_rule(color=ORANGE, strokeWidth=3)
+        .mark_rule(color=CORAL, strokeWidth=3)
         .encode(
             x=alt.X("x_lo:Q"),
             x2="x_hi:Q",
@@ -240,7 +248,7 @@ def effect_bars(effects: pd.DataFrame) -> alt.LayerChart:
     bars = base.mark_bar(cornerRadiusEnd=6, height=22).encode(
         x=alt.X("shown:Q", title="Extra energy per 100 km (kWh), harder vs easier conditions"),
         y=y,
-        color=alt.condition("datum.enough", alt.value(ORANGE), alt.value(MUTED)),
+        color=alt.condition("datum.enough", alt.value(CORAL), alt.value(MUTED)),
         tooltip=[
             alt.Tooltip("condition:N", title="Comparison"),
             _tip("harder_kwh:Q", "Harder, kWh/100 km"),
@@ -259,7 +267,7 @@ def effect_bars(effects: pd.DataFrame) -> alt.LayerChart:
 def range_heatmap(grid: pd.DataFrame, title: str) -> alt.LayerChart:
     """Range in km for every temperature (columns) and wind speed (rows); darker means further."""
     mid = (grid["range_km"].min() + grid["range_km"].max()) / 2
-    base = alt.Chart(grid, title=alt.Title(title, anchor="start"))
+    base = alt.Chart(grid, title=_title(title))
     gap = alt.Scale(paddingInner=0.08)  # even gaps between rounded tiles, so no background shows at corners
     x = alt.X(
         "temp_c:O", title="Outside temperature (°C)", scale=gap, axis=alt.Axis(labelAngle=0, grid=False)
@@ -319,17 +327,17 @@ def bar_with_interval(
 ) -> alt.LayerChart:
     """Bars for the expected value with a whisker for the likely range (e.g. 10th-90th percentile)."""
     base = _base(df, title)
-    bars = base.mark_bar(color=BLUE, cornerRadiusTopLeft=6, cornerRadiusTopRight=6, opacity=0.5).encode(
+    bars = base.mark_bar(color=SKY, cornerRadiusTopLeft=6, cornerRadiusTopRight=6, opacity=0.5).encode(
         x=_x(x, None),
         y=alt.Y(f"{y}:Q", title=y_title),
         tooltip=[_tip(x), _tip(f"{y}:Q", "Expected"), _tip(f"{lo}:Q", "Low"), _tip(f"{hi}:Q", "High")],
     )
-    whiskers = base.mark_rule(color=INK, strokeWidth=2).encode(x=_x(x, None), y=f"{lo}:Q", y2=f"{hi}:Q")
+    whiskers = base.mark_rule(color=WHISKER, strokeWidth=2).encode(x=_x(x, None), y=f"{lo}:Q", y2=f"{hi}:Q")
     return alt.layer(bars, whiskers)
 
 
 @styled
-def line(df: pd.DataFrame, x: str, y: str, title: str, y_title: str, color: str = BLUE) -> alt.LayerChart:
+def line(df: pd.DataFrame, x: str, y: str, title: str, y_title: str, color: str = SKY) -> alt.LayerChart:
     """A trend line over a soft gradient area, with points to hover."""
     gradient = alt.Gradient(
         gradient="linear",
@@ -358,7 +366,7 @@ def scatter(
 ) -> alt.Chart:
     return (
         _base(df, title)
-        .mark_circle(color=BLUE, size=70, opacity=0.75, strokeWidth=0)
+        .mark_circle(color=SKY, size=70, opacity=0.75, strokeWidth=0)
         .encode(
             x=alt.X(x, title=x_title, scale=alt.Scale(zero=False)),
             y=alt.Y(y, title=y_title, scale=alt.Scale(zero=False)),
@@ -380,7 +388,7 @@ def histogram(
     scale = alt.Scale(domain=list(extent)) if extent else alt.Undefined
     return (
         _base(df, title)
-        .mark_bar(color=BLUE, cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+        .mark_bar(color=SKY, cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
         .encode(
             x=alt.X(f"{column}:Q", bin=bins, scale=scale, title=x_title or column, axis=alt.Axis(format="d")),
             y=alt.Y("count():Q", title="Sessions"),
@@ -389,8 +397,8 @@ def histogram(
     )
 
 
-ROUTE_COLOURS = [BLUE, ORANGE, AQUA, "#8a63d2", "#c9a227"]
-CAUSE_COLOURS = ["#6f8fb5", "#9aa6b8", BLUE, "#5bc0eb", ORANGE, "#e34948", "#8a63d2", AQUA]
+ROUTE_COLOURS = [SKY, CORAL, PALE, "#8a63d2", "#c9a227"]
+CAUSE_COLOURS = ["#6f8fb5", "#9aa6b8", SKY, "#5bc0eb", CORAL, "#e34948", "#8a63d2", PALE]
 
 
 @styled
@@ -427,7 +435,7 @@ def route_profile(profile: pd.DataFrame, y: str, title: str, y_title: str) -> al
     """One line per route along the distance driven. Columns: route, km, and `y`."""
     routes = list(dict.fromkeys(profile["route"]))
     return (
-        alt.Chart(profile, title=alt.Title(title, anchor="start"))
+        alt.Chart(profile, title=_title(title))
         .mark_line(strokeWidth=2.5, interpolate="monotone")
         .encode(
             x=alt.X("km:Q", title="km from the start", axis=alt.Axis(grid=False)),
