@@ -116,7 +116,7 @@ def predicted_vs_actual(df: pd.DataFrame, unit: str) -> alt.LayerChart:
     values = pd.concat([df["predicted"], df["actual"]])
     domain = [float(values.min()), float(values.max())]
     scale = alt.Scale(domain=domain, zero=False)
-    base = _base(df, "Predicted vs actual consumption")
+    base = _base(df, None)
     points = base.mark_circle(color=SKY, size=70, opacity=0.75, strokeWidth=0).encode(
         x=alt.X("predicted:Q", title=f"Predicted {unit}", scale=scale),
         y=alt.Y("actual:Q", title=f"Actual {unit}", scale=scale),

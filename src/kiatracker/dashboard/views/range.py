@@ -3,10 +3,11 @@ from datetime import UTC, datetime, timedelta
 import pandas as pd
 import streamlit as st
 
-from kiatracker.dashboard import charts, queries
-from kiatracker.dashboard.ui import empty, number, page_header, tiles
+from kiatracker.dashboard import charts, components, queries
+from kiatracker.dashboard.ui import card, empty, number, render_html
 from kiatracker.forecast.model import NotEnoughData
 from kiatracker.forecast.outlook import LOCAL, daily_outlook, range_interval
+from kiatracker.forecast.specs import EV3
 from kiatracker.forecast.train import Trained, car_state, train
 
 
@@ -59,7 +60,7 @@ def km_range(lo, mid, hi) -> str:
 
 
 def render(con, period: queries.Period) -> None:
-    page_header("Range", "How far the current charge goes in the coming days' weather.")
+    render_html(components.hidden_title("Range"))
     try:
         trained = cached_train(fingerprint(con), con)
     except NotEnoughData as err:
@@ -76,62 +77,78 @@ def render(con, period: queries.Period) -> None:
     lo, mid, hi = range_interval(model, soc, capacity, speed, *now) if now else (None, None, None)
     mae = trained.backtest["model"]["mae"] if trained.backtest else None
     baseline = trained.backtest["temperature_only"]["mae"] if trained.backtest else None
-    tiles(
-        [
-            (
-                "Range now",
-                number(mid, "km"),
-                km_range(lo, mid, hi) + f" at {speed:.0f} km/h in the current weather.",
-            ),
-            ("Battery", number(soc, "%"), None),
-            (
-                "Avg. error",
-                number(mae, digits=1),
-                f"In kWh/100 km, predicting later drives from earlier ones; a temperature-only model: "
-                f"{number(baseline, 'kWh/100 km', 1)}.",
-            ),
-            ("Trained on", number(model.n_drives, "drives"), None),
-        ]
+    usable = (
+        f"{soc / 100 * capacity:.0f} of {capacity:.0f} kWh usable" if soc is not None and capacity else None
+    )
+    render_html(
+        components.stat_strip(
+            [
+                ("Range now", number(mid, "km"), f"{km_range(lo, mid, hi)} at {speed:.0f} km/h"),
+                ("Battery", number(soc, "%"), usable),
+                (
+                    "Typical error",
+                    number(mae, "kWh", 2),
+                    f"per 100 km; temperature alone: {number(baseline, digits=2)}",
+                ),
+                ("Learned from", number(model.n_drives, "drives"), "retrained every night"),
+            ]
+        )
     )
 
-    st.subheader("Next days")
     usual = queries.usual_charge_level(con, soc)
     today = datetime.now(LOCAL).date()
-    outlook = daily_outlook(hourly, model, soc, usual.level, capacity, speed, today) if hourly else []
-    if outlook and outlook[0]["range_km"] is not None:
-        days = pd.DataFrame(outlook)
-        days["label"] = [f"{d:%a %d %b}" for d in days["day"]]
-        st.altair_chart(
-            charts.bar_with_interval(
-                days,
-                "label:O",
-                "range_km",
-                "range_lo",
-                "range_hi",
-                f"Daytime range from {soc:.0f} % at {speed:.0f} km/h",
-                "km",
-            ),
-            width="stretch",
+    with card("outlook"):
+        left, right = st.columns([3, 1])
+        left.html(components.section_title("The next seven days, and what each one costs you"))
+        choice = right.segmented_control(
+            "Later days start from",
+            [f"Usual {usual.level} %", "Full 100 %"],
+            default=f"Usual {usual.level} %",
+            label_visibility="collapsed",
+            key="outlook-soc",
         )
-        st.caption(
-            "Route unknown, so wind is averaged over all directions: on a round trip it always costs range."
+        full = choice == "Full 100 %"
+        outlook = (
+            daily_outlook(hourly, model, soc, 100 if full else usual.level, capacity, speed, today)
+            if hourly
+            else []
         )
-    else:
-        empty("No forecast yet: run `kiatracker forecast`, then `kiatracker build`.")
+        if outlook and outlook[0]["range_km"] is not None:
+            scale = max(r["mild_km"] or 0 for r in outlook) * 1.05
+            render_html(
+                components.rule_line(soc, usual, full) + components.forecast_rows(outlook, scale, today)
+            )
+            st.caption(
+                "Route unknown, so wind is averaged over all directions: "
+                "on a round trip it always costs range."
+            )
+        else:
+            empty("No forecast yet: run `kiatracker forecast`, then `kiatracker build`.")
 
-    st.subheader("What if")
-    a, b, c = st.columns(3)
-    temp = a.slider("Outside temperature (°C)", -20, 35, 5)
-    wind = b.slider("Wind (km/h)", 0, 70, 15)
-    what_speed = c.slider("Average speed (km/h)", 20, 130, int(round(speed)))
-    full = range_interval(model, 100, capacity, what_speed, temp, wind)
-    if full[1] is not None:
-        st.metric("Range on a full battery", f"{full[1]:,.0f} km", help=km_range(*full))
+    with card("whatif"):
+        left, right = st.columns([6, 5], gap="large")
+        with left:
+            st.html(components.section_title("What if…"))
+            temp = st.slider("Outside temperature", -20, 35, 5, format="%d °C")
+            wind = st.slider("Wind", 0, 70, 15, format="%d km/h")
+            what_speed = st.slider("Average speed", 20, 130, int(round(speed)), format="%d km/h")
+        full_lo, full_mid, full_hi = range_interval(model, 100, capacity, what_speed, temp, wind)
+        if full_mid is not None:
+            right.html(components.whatif_result(full_lo, full_mid, full_hi, EV3.best_range_km))
 
-    st.subheader("How well it predicts")
-    if trained.backtest:
-        predictions = pd.DataFrame(trained.backtest["predictions"])
-        st.altair_chart(charts.predicted_vs_actual(predictions, "kWh/100 km"), width="stretch")
-    st.subheader("What the model learned")
-    for line in model.explain(speed):
-        st.markdown(f"- {line}")
+    left, right = st.columns(2)
+    with left, card("predicts"):
+        st.html(components.section_title("How well it predicts"))
+        if trained.backtest:
+            predictions = pd.DataFrame(trained.backtest["predictions"])
+            st.altair_chart(charts.predicted_vs_actual(predictions, "kWh/100 km"), width="stretch")
+            st.caption(
+                "Each dot predicts a later drive from earlier ones only. On the line would be perfect."
+            )
+    with right, card("learned"):
+        st.html(components.section_title("What it has learned about your car"))
+        st.html(
+            components.icon_list(
+                [(icon, components.theme.TINT_SKY, text) for icon, text in model.explain_items(speed)]
+            )
+        )

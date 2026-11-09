@@ -77,6 +77,36 @@ h1, h2, h3 {{ font-family: "{t.SERIF}", serif; font-weight: 400; letter-spacing:
 .wr-icons .ic {{ flex: none; width: 34px; height: 34px; border-radius: 12px; display: grid;
                  place-items: center; }}
 .wr-icons p {{ margin: 0; font-size: 15px; line-height: 1.5; color: {t.INK_SOFT}; }}
+.wr-days {{ display: flex; flex-direction: column; gap: 2px; }}
+.wr-day {{ display: grid; grid-template-columns: 74px 150px minmax(0, 1fr) 120px; gap: 18px;
+           align-items: center;
+           padding: 12px 14px; border-radius: 16px; }}
+.wr-day .d, .wr-day .w, .wr-day .r {{ display: flex; flex-direction: column; gap: 3px; }}
+.wr-day .d span, .wr-day .r span, .wr-day .muted {{ font-size: 12px; color: {t.MUTED}; }}
+.wr-day .w .muted {{ display: flex; align-items: center; gap: 5px; font-size: 13px; }}
+.wr-day .r {{ align-items: flex-end; }}
+.wr-day .r b {{ font-family: "{t.SERIF}", serif; font-weight: 400; font-size: 24px; line-height: 1.1; }}
+.wr-day .bar {{ position: relative; height: 26px; }}
+.wr-day .bar i {{ position: absolute; top: 4px; height: 18px; left: 0; border-radius: 999px 0 0 999px; }}
+.wr-day .bar i + i {{ border-radius: 0; }}
+.wr-day .bar i.end {{ border-radius: 0 999px 999px 0; }}
+.wr-day .bar .lbl {{ position: absolute; top: 5px; font-size: 11px; color: {t.SKY_INK};
+                     white-space: nowrap; }}
+.wr-day .bar .lbl.muted {{ color: {t.MUTED}; }}
+.wr-legend {{ display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; font-size: 13px;
+              color: {t.MUTED}; margin-top: 10px; }}
+.wr-legend div {{ display: flex; flex-wrap: wrap; gap: 16px; }}
+.wr-legend i {{ display: inline-block; width: 14px; height: 10px; border-radius: 3px; margin-right: 6px; }}
+.wr-whatif {{ background: {t.PAPER}; border-radius: 22px; padding: 26px; display: flex;
+              flex-direction: column;
+              gap: 6px; }}
+.wr-whatif .big {{ font-family: "{t.SERIF}", serif; font-size: 64px; line-height: 1; color: {t.CORAL}; }}
+.wr-whatif .track {{ height: 10px; border-radius: 999px; background: {t.RULE}; margin-top: 14px; }}
+.wr-whatif .track i {{ display: block; height: 100%; border-radius: 999px; background: {t.CORAL}; }}
+@media (max-width: 640px) {{
+  .wr-day {{ grid-template-columns: 64px minmax(0, 1fr) 90px; }}
+  .wr-day .bar {{ grid-column: 1 / -1; order: 4; }}
+}}
 .wr-hidden {{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
               white-space: nowrap; }}
 @media (max-width: 640px) {{

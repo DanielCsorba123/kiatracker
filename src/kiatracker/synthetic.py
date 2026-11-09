@@ -28,7 +28,7 @@ CAPACITY_KWH = 78.0  # usable: what 0-100 % spans (the car reports the gross 81.
 POLL = timedelta(minutes=5)
 AC_KW = 11.0
 DC_KW = 120.0
-FORECAST_DAYS = 3
+FORECAST_DAYS = 7  # as many days as the real forecast fetches
 # true physics: kWh/100 km = c0 + c_aero*(v+h)^2*density + (c_heat*cold + c_cool*hot + c_time) / v,
 # plus c_climb kWh per metre climbed and c_regen kWh back per metre descended
 TRUTH = {  # a little thirstier than EV Database's EV3, as a real car with winter tyres would be

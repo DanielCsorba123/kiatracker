@@ -67,11 +67,22 @@ def test_personal_mode_without_database_shows_build_hint(monkeypatch, tmp_path, 
     assert any("kiatracker build" in warning.value for warning in at.warning)
 
 
+def heading(at: AppTest) -> str:
+    """The page's h1: Streamlit's title, or the hidden h1 the Morning pages render as HTML."""
+    if at.title:
+        return at.title[0].value
+    for element in at.get("html"):
+        body = element.proto.body
+        if body.startswith('<h1 class="wr-hidden">'):
+            return body.removeprefix('<h1 class="wr-hidden">').removesuffix("</h1>")
+    return ""
+
+
 @pytest.mark.parametrize("page", PAGES)
 def test_page_renders_demo_data(page, demo_db):
     at = run_page(page, demo_db)
     assert not at.exception
-    assert at.title[0].value == page.capitalize()
+    assert heading(at) == page.capitalize()
 
 
 @pytest.mark.parametrize("page", PAGES)
