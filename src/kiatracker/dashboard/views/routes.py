@@ -10,7 +10,7 @@ import streamlit.components.v1 as components_v1
 
 from kiatracker.config import load_settings
 from kiatracker.dashboard import charts, components, queries
-from kiatracker.dashboard.map import map_html
+from kiatracker.dashboard.map import map_src
 from kiatracker.dashboard.ui import card, number, render_html
 from kiatracker.dashboard.views.drives import cached_model
 from kiatracker.dashboard.views.range import fingerprint
@@ -109,7 +109,7 @@ def route_map(estimates) -> None:
         for i, e in enumerate(estimates)
     ]
     with card("map"):
-        components_v1.html(map_html(routes), height=MAP_HEIGHT)
+        components_v1.iframe(map_src(routes), height=MAP_HEIGHT)
 
 
 def render(con, period: queries.Period) -> None:
