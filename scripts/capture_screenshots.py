@@ -1,4 +1,4 @@
-"""README screenshots of the demo dashboard, in the light Morning theme, with the system's Edge via Playwright.
+"""README screenshots of the demo dashboard in the light Morning theme, via Playwright and the system Edge.
 
 Start the demo first, then capture:
 
