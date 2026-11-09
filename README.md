@@ -38,16 +38,16 @@ to compare routes before you drive them.
 | | |
 |---|---|
 | ![Drives: consumption against temperature, wind and trip length](docs/images/drives.png) | ![Range: forecast for the next days, what-if, backtest](docs/images/range.png) |
-| **Drives:** what changes consumption, range in any conditions, the drive log and an analyst view. | **Range:** the next days' range in the forecast weather, with the model's evidence. |
+| **Drives:** a weekly briefing, what makes a drive cost more, range in any conditions and recent drives. | **Range:** seven days of range, what cold and wind cost each day, a what-if and the model's evidence. |
 | ![Charging: energy per week and battery level at plug-in and unplug](docs/images/charging.png) | ![Costs: savings against a petrol car](docs/images/costs.png) |
-| **Charging:** energy per week and where in the battery charging starts and stops. | **Costs:** what driving electric saved against petrol. |
+| **Charging:** a typical charge, where in the battery it starts and stops, and when you plug in. | **Costs:** what driving electric saved against petrol, by week, month or year. |
 
 ![Routes: three ways from Krems to Wiener Neustadt with roads, energy, odds, energy by cause, profiles and map](docs/images/routes.png)
 
-**Routes:** candidate routes with the roads they use, energy and arrival charge in the forecast weather, the
-odds that one beats another, where the energy goes, and the height profile.
+**Routes:** candidate routes on a real map, with the roads they use, energy and arrival charge in the forecast
+weather, how often each one wins, the height profile along the road, and why the two closest differ.
 
-All screenshots use the built-in simulator's demo data.
+All screenshots use the built-in simulator's demo data (`scripts/capture_screenshots.py`).
 
 ## Try it without a car
 

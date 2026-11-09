@@ -35,6 +35,10 @@ dev = [
     "respx>=0.21",
     "ruff>=0.6",
 ]
+screenshots = [  # scripts/capture_screenshots.py only
+    "playwright>=1.47",
+    "pillow>=10",
+]
 
 [build-system]
 requires = ["hatchling"]

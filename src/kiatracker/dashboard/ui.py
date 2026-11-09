@@ -212,6 +212,11 @@ h1, h2, h3 {{ font-family: "{t.SERIF}", serif; font-weight: 400; letter-spacing:
 @media (max-width: 640px) {{ .wr-routes {{ grid-template-columns: 1fr; }} }}
 .wr-callout {{ background: {t.TINT_CORAL}; border-radius: 18px; padding: 20px 22px; font-size: 15px; line-height: 1.55; color: {t.INK_SOFT}; }}
 .stFormSubmitButton button p, .stButton button[kind="primary"] p {{ color: {t.CARD}; }}
+@media (max-width: 640px) {{
+  [class*="st-key-card-"] {{ padding: 16px; border-radius: 20px; }}
+  [data-testid="stButtonGroup"] {{ flex-wrap: wrap; max-width: 100%; border-radius: 18px; }}
+  [data-testid="stButtonGroup"] button {{ padding: 4px 10px; font-size: 13px; }}
+}}
 .wr-hidden {{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
               white-space: nowrap; }}
 @media (max-width: 640px) {{
