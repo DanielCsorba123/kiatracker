@@ -10,7 +10,6 @@ from kiatracker.dashboard.queries import Period
 
 MISSING = "–"
 BRAND = "Windrose"
-TAGLINE = "How far an EV3 really goes, in real weather."
 STATIC = Path(__file__).parent / "static"
 LOGO = STATIC / "windrose-sun.svg"
 TINTS = {"coral": t.TINT_CORAL, "sky": t.TINT_SKY, "sun": t.TINT_SUN, "warm": "#FFF8EC"}
@@ -263,21 +262,10 @@ def period_control(default_days: int) -> Period:
     return Period(start, end)
 
 
-def page_header(title: str, lede: str) -> None:
-    st.title(title)
-    st.markdown(f"<p style='color:{t.MUTED}'>{lede}</p>", unsafe_allow_html=True)
-
-
 def number(value: float | None, unit: str = "", digits: int = 0) -> str:
     if value is None:
         return MISSING
     return f"{value:,.{digits}f}{' ' + unit if unit else ''}"
-
-
-def tiles(items: list[tuple[str, str, str | None]]) -> None:
-    """A row of stat cards: (label, formatted value, help text)."""
-    for column, (label, value, help_text) in zip(st.columns(len(items)), items, strict=True):
-        column.container(border=True).metric(label, value, help=help_text)
 
 
 def empty(message: str = "No data in this period yet.") -> None:
