@@ -81,7 +81,7 @@ def render(con, period: queries.Period) -> None:
     left, right = st.columns([13, 10])
     with left, card("monthly"):
         st.html(components.section_title("How much you use, month by month"))
-        st.caption("kWh per 100 km · coral months are the cold ones")
+        st.caption("kWh per 100 km · coral months used more than 10 % above your average")
         st.altair_chart(charts.monthly_use(monthly), width="stretch")
     tips = queries.tips_facts(con, period, outlook, today)
     if tips:

@@ -129,6 +129,43 @@ h1, h2, h3 {{ font-family: "{t.SERIF}", serif; font-weight: 400; letter-spacing:
   .wr-hero h2 {{ font-size: 38px; }}
   .wr-week {{ grid-template-columns: repeat(4, minmax(0, 1fr)); }}
 }}
+.wr-brief {{ background: linear-gradient(135deg, {t.CARD} 0%, #FFF8EC 100%); border-radius: 24px;
+              padding: 24px 26px; box-shadow: {t.SHADOW}; display: flex; flex-direction: column; gap: 18px; }}
+.wr-brief .head {{ display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap;
+                   gap: 8px; }}
+.wr-brief .t {{ font-family: "{t.SERIF}", serif; font-size: 22px; }}
+.wr-brief .items {{ display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 24px; }}
+.wr-brief .item {{ display: flex; gap: 12px; align-items: flex-start; }}
+.wr-brief .ic {{ flex: none; width: 36px; height: 36px; border-radius: 12px; display: grid;
+                 place-items: center; }}
+.wr-brief p {{ margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: {t.INK_SOFT}; }}
+.wr-effects {{ display: flex; flex-direction: column; gap: 18px; }}
+.wr-effect {{ display: grid; grid-template-columns: 230px minmax(0, 1fr) 64px; gap: 16px;
+              align-items: center; }}
+.wr-effect > div:first-child {{ display: flex; flex-direction: column; }}
+.wr-effect .track {{ height: 16px; background: {t.WASH}; border-radius: 999px; }}
+.wr-effect .track i {{ display: block; height: 100%; border-radius: 999px; }}
+.wr-effect .v {{ font-family: "{t.SERIF}", serif; font-size: 20px; text-align: right; }}
+.wr-grid {{ display: grid; grid-template-columns: 150px repeat(var(--n), minmax(0, 1fr)); gap: 8px; }}
+.wr-grid .h {{ text-align: center; font-size: 13px; color: {t.MUTED}; }}
+.wr-grid .w {{ font-size: 14px; color: {t.MUTED}; align-self: center; }}
+.wr-grid .c {{ border-radius: 14px; padding: 14px 6px; text-align: center; font-family: "{t.SERIF}", serif;
+               font-size: 22px; }}
+.wr-grid .c span {{ font-family: "{t.SANS}", sans-serif; font-size: 12px; color: {t.MUTED}; }}
+.wr-drives {{ display: flex; flex-direction: column; gap: 18px; }}
+.wr-drives-day .day {{ display: block; padding-bottom: 6px; }}
+.wr-drives-day .row {{ display: grid; grid-template-columns: 56px minmax(0, 1fr) 90px 130px 60px; gap: 12px;
+                       align-items: center; padding: 12px 0; border-top: 1px solid {t.RULE}; }}
+.wr-drives-day .row .km, .wr-drives-day .row .tag {{ text-align: right; }}
+@media (max-width: 640px) {{
+  .wr-brief .items {{ grid-template-columns: 1fr; }}
+  .wr-effect {{ grid-template-columns: 1fr 56px; }}
+  .wr-effect .track {{ grid-column: 1 / -1; order: 3; }}
+  .wr-grid {{ grid-template-columns: 80px repeat(var(--n), minmax(0, 1fr)); gap: 4px; }}
+  .wr-grid .c {{ font-size: 15px; padding: 10px 2px; }}
+  .wr-drives-day .row {{ grid-template-columns: 48px minmax(0, 1fr) 70px; }}
+  .wr-drives-day .row .tag, .wr-drives-day .row > :last-child {{ display: none; }}
+}}
 .wr-hidden {{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
               white-space: nowrap; }}
 @media (max-width: 640px) {{

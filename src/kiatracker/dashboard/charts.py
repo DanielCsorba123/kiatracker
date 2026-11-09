@@ -488,3 +488,27 @@ def weekly_distance(df: pd.DataFrame) -> alt.Chart:
         )
         .properties(height=HEIGHT - 100)
     )
+
+
+@styled
+def drives_over_year(df: pd.DataFrame) -> alt.LayerChart:
+    """Every drive by date and kWh/100 km (coral at 19 or more), with a smooth seasonal average."""
+    data = df.dropna(subset=["kwh_per_100km"]).assign(costly=lambda d: d["kwh_per_100km"] >= 19)
+    base = alt.Chart(data).encode(
+        x=alt.X(
+            "start_local:T",
+            title=None,
+            axis=alt.Axis(grid=False, format="%b", labelAngle=0, tickCount="month"),
+        )
+    )
+    dots = base.mark_circle(size=40, opacity=0.55).encode(
+        y=alt.Y("kwh_per_100km:Q", title="kWh/100 km", scale=alt.Scale(zero=False)),
+        color=alt.condition("datum.costly", alt.value(CORAL), alt.value(SKY)),
+        tooltip=[_tip("start_local:T"), _tip("kwh_per_100km:Q", "kWh/100 km")],
+    )
+    trend = (
+        base.transform_loess("start_local", "kwh_per_100km", bandwidth=0.3)
+        .mark_line(color=theme.INK, opacity=0.6, strokeWidth=2)
+        .encode(y="kwh_per_100km:Q")
+    )
+    return (dots + trend).properties(height=HEIGHT - 50)

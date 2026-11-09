@@ -211,3 +211,28 @@ def test_tips_cold_forecast_suggests_preheating(demo, all_time):
 
 def test_tips_on_an_empty_database(empty, all_time):
     assert q.tips_facts(empty, all_time, [], date.today()) == []
+
+
+NOV = Period(date(2026, 11, 1), date(2026, 11, 30))
+
+
+def test_briefing_facts_empty_week_gives_nothing(empty, all_time):
+    assert q.briefing_facts(empty, all_time, date.today()) == []
+
+
+def test_briefing_skips_comparison_without_last_week(tiny):
+    titles = [t for _, _, t, _ in q.briefing_facts(tiny(), NOV, date(2026, 11, 9))]  # 3 Nov only
+    assert "A better week" not in titles and "A harder week" not in titles
+    assert "Best drive" in titles
+
+
+def test_briefing_compares_with_last_week(tiny):
+    facts = q.briefing_facts(tiny(), NOV, date(2026, 11, 16))  # 10 Nov this week, 3 Nov the week before
+    titles = [t for _, _, t, _ in facts]
+    assert "A better week" in titles or "A harder week" in titles
+
+
+def test_recent_drives_label_days(tiny):
+    df = q.recent_drives(tiny(), today=date(2026, 11, 10))
+    assert list(df["day_label"]) == ["Today", "Tue 3 Nov"]
+    assert {"time", "start_zone", "end_zone", "distance_km", "kwh_per_100km", "temp_c"} <= set(df.columns)

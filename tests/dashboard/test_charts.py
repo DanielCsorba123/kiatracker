@@ -249,3 +249,14 @@ def test_monthly_use_highlights_months_10pct_above_mean():
 def test_weekly_distance_highlights_the_last_week():
     spec = charts.weekly_distance(DF.rename(columns={"km": "distance_km"})).to_dict()
     assert charts.CORAL in str(spec) and "tooltip" in str(spec)
+
+
+def test_drives_over_year_colours_costly_drives():
+    df = pd.DataFrame(
+        {
+            "start_local": pd.to_datetime(["2026-01-05", "2026-06-05", "2026-07-05"]),
+            "kwh_per_100km": [21.0, 15.0, 15.5],
+        }
+    )
+    spec = str(charts.drives_over_year(df).to_dict())
+    assert charts.CORAL in spec and charts.SKY in spec and "loess" in spec

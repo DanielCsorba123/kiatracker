@@ -400,3 +400,83 @@ def tips_facts(con, period: Period, outlook: list[dict], today: date) -> list[tu
         home = s.loc[s["zone"] == "home", "energy_kwh"].sum() / total
         tips.append(("⌂", theme.TINT_SUN, f"{home:.0%} of your charging happened at home."))
     return tips[:3]
+
+
+def _measured(d: pd.DataFrame) -> pd.DataFrame:
+    return d[d["kwh_per_100km"].notna() & (d["distance_km"] >= 5)]
+
+
+def briefing_facts(con, period: Period, today: date) -> list[tuple[str, str, str, str]]:
+    """Up to three items for the Drives briefing, over the 7 days ending today: (icon, tint, title, text)."""
+    from kiatracker.dashboard import theme
+
+    week = drives(con, Period(today - timedelta(days=6), today))
+    if week.empty:
+        return []
+    facts = []
+    effects = condition_effects(con, period)
+    effects = effects[effects["enough"] & effects["pct"].notna() & (effects["pct"] > 0)]
+    if not effects.empty:
+        top = effects.loc[effects["pct"].idxmax()]
+        factor, column, harder, *_ = next(c for c in CONDITIONS if c[0] == top["factor"])
+        values = week[column].dropna()
+        touched = int(harder(values).sum()) if not values.empty else 0
+        title = "Cold costs you most" if factor == "Cold" else f"{factor} costs you most"
+        facts.append(
+            (
+                "❄" if factor == "Cold" else "≋",
+                theme.TINT_SKY,
+                title,
+                f"{top['pct']:.0%} more energy per km {top['harder_label']} than {top['easier_label']}. "
+                f"{touched} of this week's {len(week)} drives were {top['harder_label']}.",
+            )
+        )
+    this, last = (
+        _measured(week),
+        _measured(drives(con, Period(today - timedelta(days=13), today - timedelta(days=7)))),
+    )
+    this_kwh = consumption(this["energy_kwh"], this["distance_km"])
+    last_kwh = consumption(last["energy_kwh"], last["distance_km"])
+    if this_kwh is not None and last_kwh is not None:
+        change = this_kwh / last_kwh - 1
+        better = change <= 0
+        facts.append(
+            (
+                "↘" if better else "↗",
+                theme.TINT_GREEN if better else theme.TINT_CORAL,
+                "A better week" if better else "A harder week",
+                f"{len(week)} drives, {week['distance_km'].sum():.0f} km at {this_kwh:.1f} kWh/100 km: "
+                f"{abs(change):.0%} {'less' if better else 'more'} than last week.",
+            )
+        )
+    if not this.empty:
+        best = this.loc[this["kwh_per_100km"].idxmin()]
+        temp = f" at {best['temp_c']:.0f} °C" if pd.notna(best["temp_c"]) else ""
+        facts.append(
+            (
+                "★",
+                theme.TINT_SUN,
+                "Best drive",
+                f"{best['start_local']:%A}'s drive from {best['start_zone']} to {best['end_zone']}: "
+                f"{best['kwh_per_100km']:.1f} kWh/100 km{temp}.",
+            )
+        )
+    return facts
+
+
+def day_label(day: date, today: date) -> str:
+    if day == today:
+        return "Today"
+    if day == today - timedelta(days=1):
+        return "Yesterday"
+    if today - day < timedelta(days=7):
+        return f"{day:%A}"
+    return f"{day:%a} {day.day} {day:%b}"
+
+
+def recent_drives(con, today: date, n: int = 8) -> pd.DataFrame:
+    """The latest drives with a day label (Today, Yesterday, a weekday, or a date) and local start time."""
+    d = drives(con, Period(today - timedelta(days=60), today)).head(n).copy()
+    d["day_label"] = [day_label(ts.date(), today) for ts in d["start_local"]]
+    d["time"] = [f"{ts:%H:%M}" for ts in d["start_local"]]
+    return d[["day_label", "time", "start_zone", "end_zone", "distance_km", "kwh_per_100km", "temp_c"]]

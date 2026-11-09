@@ -1,5 +1,6 @@
 from datetime import date
 
+import pandas as pd
 import pytest
 
 from kiatracker.dashboard import components
@@ -124,3 +125,71 @@ def test_week_strip_highlights_today_only():
     rows = [dict(day=date(2026, 11, 9 + i), sky="sun", temp_max=6, range_km=384 + i) for i in range(7)]
     out = components.week_strip(rows, today=date(2026, 11, 9))
     assert out.count(components.theme.TINT_CORAL) == 1 and "Today" in out and "390" in out
+
+
+def test_briefing_card_without_facts():
+    assert "No drives in the last 7 days" in components.briefing([], "Monday 9 November")
+
+
+def test_briefing_card_lists_facts():
+    out = components.briefing([("❄", components.theme.TINT_SKY, "Cold costs you most", "31 % more")], "Mon")
+    assert "Your briefing" in out and "Cold costs you most" in out and "from the last 7 days" in out
+
+
+def test_range_grid_rounds_to_5_and_labels_wind():
+    grid = pd.DataFrame(
+        {"temp_c": [-10, 20, -10, 20], "wind_kph": [0, 0, 15, 15], "range_km": [323.4, 418.9, 310.0, 400.0]}
+    )
+    out = components.range_grid(grid)
+    assert "325" in out and "420" in out and "Calm" in out and "Breezy · 15 km/h" in out and "−10 °C" in out
+
+
+def test_effect_rows_grey_without_enough_drives():
+    effects = pd.DataFrame(
+        [
+            dict(
+                factor="Cold",
+                harder_label="below 5 °C",
+                easier_label="10 °C or warmer",
+                pct=0.31,
+                enough=True,
+            ),
+            dict(
+                factor="Wind",
+                harder_label="20 km/h or more",
+                easier_label="under 10 km/h",
+                pct=0.09,
+                enough=False,
+            ),
+        ]
+    )
+    out = components.effect_rows(effects)
+    assert "+31 %" in out and components.theme.CORAL in out and components.theme.PALE in out
+
+
+def test_drive_list_escapes_zone_names_and_groups_days():
+    df = pd.DataFrame(
+        [
+            dict(
+                day_label="Today",
+                time="07:42",
+                start_zone="<b>home</b>",
+                end_zone="other",
+                distance_km=31.4,
+                kwh_per_100km=18.9,
+                temp_c=4,
+            ),
+            dict(
+                day_label="Today",
+                time="17:20",
+                start_zone="other",
+                end_zone="home",
+                distance_km=31.9,
+                kwh_per_100km=17.6,
+                temp_c=9,
+            ),
+        ]
+    )
+    out = components.drive_list(df)
+    assert "<b>" not in out and out.count("Today") == 1 and "18.9 kWh/100" in out
+    assert "wr-chip coral" not in out.split("17:20")[1] and "wr-chip sky" in out
