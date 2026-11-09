@@ -18,6 +18,7 @@ decision: if the context below no longer holds, the decision is open again.
 | [0010](0010-route-comparison.md) | Route comparison with OSRM, ~1 km pieces and a common-random-numbers Monte Carlo | Accepted |
 | [0011](0011-raspberry-pi-docker-tailscale.md) | Always-on collector on a Raspberry Pi in Docker, reached over Tailscale | Accepted |
 | [0012](0012-streamlit-dashboard.md) | Streamlit dashboard with Streamlit-free query and chart layers | Accepted |
+| [0013](0013-maplibre-openfreemap.md) | The Routes map on MapLibre and OpenFreeMap, with a recoloured style in the repository | Accepted |
 
 Format: Context, Decision, Consequences, Alternatives considered. New records get the next number; a
 reversed decision is not deleted but marked *Superseded by NNNN*.

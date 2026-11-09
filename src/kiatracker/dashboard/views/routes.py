@@ -5,11 +5,12 @@ from itertools import accumulate
 
 import httpx
 import pandas as pd
-import pydeck as pdk
 import streamlit as st
+import streamlit.components.v1 as components_v1
 
 from kiatracker.config import load_settings
 from kiatracker.dashboard import charts, components, queries
+from kiatracker.dashboard.map import map_html
 from kiatracker.dashboard.ui import card, number, render_html
 from kiatracker.dashboard.views.drives import cached_model
 from kiatracker.dashboard.views.range import fingerprint
@@ -31,7 +32,7 @@ from kiatracker.route_energy import (
 DEFAULT_CAPACITY_KWH = EV3.usable_kwh
 CAPS = {"No cap (typical road speeds)": None, "130 km/h": 130.0, "120 km/h": 120.0, "110 km/h": 110.0,
         "100 km/h": 100.0}  # fmt: skip
-RGB = [tuple(int(c[i : i + 2], 16) for i in (1, 3, 5)) for c in charts.ROUTE_COLOURS]
+MAP_HEIGHT = 560
 
 
 @st.cache_data(
@@ -99,23 +100,16 @@ def profiles(estimates) -> pd.DataFrame:
 
 
 def route_map(estimates) -> None:
-    paths = [
+    routes = [
         {
-            "route": e.route.label,
-            "path": [[lon, lat] for lat, lon in e.route.points],
-            "color": RGB[i % len(RGB)],
+            "label": e.route.label,
+            "colour": charts.ROUTE_COLOURS[i % len(charts.ROUTE_COLOURS)],
+            "coords": [[round(lon, 5), round(lat, 5)] for lat, lon in e.route.points],
         }
         for i, e in enumerate(estimates)
     ]
-    points = [p for e in estimates for p in e.route.points]
-    view = pdk.ViewState(
-        latitude=sum(p[0] for p in points) / len(points),
-        longitude=sum(p[1] for p in points) / len(points),
-        zoom=8,
-    )
-    layer = pdk.Layer("PathLayer", paths, get_path="path", get_color="color", width_min_pixels=4,
-                      pickable=True, opacity=0.85)  # fmt: skip
-    st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view, tooltip={"text": "{route}"}))
+    with card("map"):
+        components_v1.html(map_html(routes), height=MAP_HEIGHT)
 
 
 def render(con, period: queries.Period) -> None:
