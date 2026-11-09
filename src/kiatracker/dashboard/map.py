@@ -94,12 +94,20 @@ function addRoutes() {{
               'circle-stroke-width': 3 }} }}, firstSymbol);
 }}
 map.on('load', addRoutes);
-let failed = false;
-map.on('error', () => {{
-  if (failed) return;
-  failed = true;
-  document.getElementById('notice').hidden = false;
-  if (!map.isStyleLoaded()) {{
+// One failed tile is normal on a flaky network: only many failures with nothing loaded mean the tiles are
+// unreachable. Only a missing style itself swaps in the plain background.
+let tileErrors = 0, tileLoaded = false, fellBack = false;
+map.on('data', e => {{ if (e.tile && e.dataType === 'source') tileLoaded = true; }});
+map.on('error', e => {{
+  if (e.tile) {{
+    tileErrors += 1;
+    if (tileErrors >= 8 && !tileLoaded) document.getElementById('notice').hidden = false;
+    return;
+  }}
+  if (fellBack) return;
+  if (!map.getStyle() || !map.getStyle().sources || !Object.keys(map.getStyle().sources).length) {{
+    fellBack = true;
+    document.getElementById('notice').hidden = false;
     map.setStyle({{ version: 8, sources: {{}}, layers: [{{ id: 'paper', type: 'background',
       paint: {{ 'background-color': PAPER }} }}] }});
     map.once('styledata', addRoutes);

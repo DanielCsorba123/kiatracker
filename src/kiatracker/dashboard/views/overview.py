@@ -1,11 +1,11 @@
 """Overview: today's range in a sentence, the week ahead, how much you use, and a few things worth knowing."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import streamlit as st
 
 from kiatracker.dashboard import charts, components, queries
-from kiatracker.dashboard.ui import card, empty, render_html
+from kiatracker.dashboard.ui import card, empty, period_label, render_html
 from kiatracker.dashboard.views.range import cached_train, fingerprint, forecast_hourly
 from kiatracker.forecast.model import NotEnoughData
 from kiatracker.forecast.outlook import LOCAL, daily_outlook, range_interval
@@ -62,7 +62,8 @@ def render(con, period: queries.Period) -> None:
 
     left, right = st.columns([6, 5], gap="large", vertical_alignment="center")
     left.html(components.hero(greeting, mid, lo, hi, soc, comparison))
-    right.html(components.battery_card(soc, k["distance_km"], k["kwh_per_100km"], saved))
+    label = period_label(period.start, period.end, date.today())
+    right.html(components.battery_card(soc, k["distance_km"], k["kwh_per_100km"], saved, label))
 
     if outlook:
         with card("week"):

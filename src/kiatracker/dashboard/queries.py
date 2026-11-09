@@ -311,6 +311,7 @@ class UsualCharge:
     sessions: int  # slow sessions it was learned from
     at_level: int  # of those, how many ended at `level`
     assumed: bool  # too few sessions: 80 % is assumed
+    clamped: bool = False  # the battery already holds more than the usual level: today's reading is used
 
 
 USUAL_FALLBACK = 80
@@ -339,9 +340,10 @@ def usual_charge_level(con, latest_soc: float | None) -> UsualCharge:
     else:
         level = int(5 * round(statistics.median(ends) / 5))
         at_level, assumed = rounded.count(level), False
-    if latest_soc is not None:
-        level = max(level, round(latest_soc))
-    return UsualCharge(min(level, 100), len(rounded), at_level, assumed)
+    clamped = latest_soc is not None and round(latest_soc) > level
+    if clamped:
+        level, at_level, assumed = round(latest_soc), 0, False
+    return UsualCharge(min(level, 100), len(rounded), at_level, assumed, clamped)
 
 
 def monthly(con, period: Period) -> pd.DataFrame:
@@ -414,7 +416,7 @@ def tips_facts(con, period: Period, outlook: list[dict], today: date) -> list[tu
         )
     s = _sessions(con, period)
     total = s["energy_kwh"].sum()
-    if total > 0:
+    if total > 0 and s["zone"].notna().any():
         home = s.loc[s["zone"] == "home", "energy_kwh"].sum() / total
         tips.append(("⌂", theme.TINT_SUN, f"{home:.0%} of your charging happened at home."))
     return tips[:3]
@@ -422,6 +424,12 @@ def tips_facts(con, period: Period, outlook: list[dict], today: date) -> list[tu
 
 def _measured(d: pd.DataFrame) -> pd.DataFrame:
     return d[d["kwh_per_100km"].notna() & (d["distance_km"] >= 5)]
+
+
+def _from_to(drive) -> str:
+    if pd.isna(drive["start_zone"]) or pd.isna(drive["end_zone"]):
+        return ""
+    return f" from {drive['start_zone']} to {drive['end_zone']}"
 
 
 def briefing_facts(con, period: Period, today: date) -> list[tuple[str, str, str, str]]:
@@ -475,7 +483,7 @@ def briefing_facts(con, period: Period, today: date) -> list[tuple[str, str, str
                 "★",
                 theme.TINT_SUN,
                 "Best drive",
-                f"{best['start_local']:%A}'s drive from {best['start_zone']} to {best['end_zone']}: "
+                f"{best['start_local']:%A}'s drive{_from_to(best)}: "
                 f"{best['kwh_per_100km']:.1f} kWh/100 km{temp}.",
             )
         )

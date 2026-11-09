@@ -115,3 +115,9 @@ def test_cloud_entry_point_always_shows_demo(monkeypatch):
     at = AppTest.from_file(entry, default_timeout=120).run()
     assert not at.exception
     assert any("Simulated data" in md.value for md in at.markdown)
+
+
+def test_period_control_only_on_pages_that_use_a_period():
+    from kiatracker.dashboard.ui import PERIOD_PAGES
+
+    assert PERIOD_PAGES == {"overview", "drives", "charging", "costs"}

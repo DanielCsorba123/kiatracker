@@ -286,3 +286,32 @@ def test_route_cards_escape_typed_names():
     out = components.route_cards([e], [1.0], ["#DC756D"])
     assert "<img" not in out and "A2 &amp; S6" in out and "wins 100 of 100" in out
     assert "26.4 kWh" in out and "arrive at 56 %" in out and "climbs 772 m" in out
+
+
+def test_rule_line_when_clamped_to_todays_charge():
+    u = UsualCharge(level=89, sessions=6, at_level=0, assumed=False, clamped=True)
+    out = components.rule_line(89, u, full=False)
+    assert "at least today&#x27;s 89 %" in out and "stopped at" not in out
+
+
+def test_battery_card_labels_the_period():
+    out = components.battery_card(80, 1200, 17.7, 30000, "Last 30 days")
+    assert "Last 30 days" in out and "This year" not in out
+
+
+def test_drive_list_without_zones_does_not_print_none():
+    df = pd.DataFrame(
+        [
+            dict(
+                day_label="Today",
+                time="07:42",
+                start_zone=None,
+                end_zone=None,
+                distance_km=31.4,
+                kwh_per_100km=18.9,
+                temp_c=4,
+            )
+        ]
+    )
+    out = components.drive_list(df)
+    assert "None" not in out and "Drive" in out

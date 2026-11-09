@@ -12,6 +12,7 @@ MISSING = "–"
 BRAND = "Windrose"
 STATIC = Path(__file__).parent / "static"
 LOGO = STATIC / "windrose-sun.svg"
+PERIOD_PAGES = {"overview", "drives", "charging", "costs"}  # Range and Routes look ahead, not back
 TINTS = {"coral": t.TINT_CORAL, "sky": t.TINT_SKY, "sun": t.TINT_SUN, "warm": "#FFF8EC"}
 
 STYLE = f"""

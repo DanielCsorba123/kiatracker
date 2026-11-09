@@ -7,46 +7,59 @@ from kiatracker.dashboard import charts, components, queries
 from kiatracker.dashboard.ui import card, empty, number, render_html
 from kiatracker.prices import ELECTRICITY
 
+BANDS = {
+    "Above average consumption": ELECTRICITY["hu_above_average_huf"],
+    "Within average consumption": ELECTRICITY["hu_below_average_huf"],
+}
 
-def assumptions() -> queries.CostAssumptions:
+
+def current_assumptions(state) -> queries.CostAssumptions:
+    """The assumptions as the widgets hold them (Streamlit updates widget state before the rerun), else the
+    defaults. Read at the top of the page, so a change shows at once."""
+    default = queries.CostAssumptions()
+    return queries.CostAssumptions(
+        float(state.get("cost-petrol", default.petrol_l_per_100km)),
+        float(state.get("cost-diesel", default.diesel_l_per_100km)),
+        float(state.get("cost-loss", default.charging_loss_pct)),
+        BANDS.get(state.get("cost-band"), default.hu_electricity_huf),
+        default.at_electricity_eur,
+    )
+
+
+def assumptions() -> None:
     """Sensible defaults, adjustable in an expander; nothing has to be typed in."""
     default = queries.CostAssumptions()
     with st.expander("Assumptions"):
         a, b, c = st.columns(3)
-        band = a.radio(
+        a.radio(
             "Your electricity price (Hungary)",
-            [
-                f"Above average consumption: {ELECTRICITY['hu_above_average_huf']:.1f} Ft/kWh",
-                f"Within average consumption: {ELECTRICITY['hu_below_average_huf']:.0f} Ft/kWh",
-            ],
+            list(BANDS),
+            key="cost-band",
+            format_func=lambda band: f"{band}: {BANDS[band]:.1f} Ft/kWh",
             help="Hungary's regulated household tariff has a cheaper band up to the average consumption "
             "(2,523 kWh a year) and a dearer one above it. With solar on yearly net metering, the car's kWh "
             "come on top of what the panels cover, so they're billed in the upper band. Check your bill.",
         )
-        hu_price = (
-            ELECTRICITY["hu_above_average_huf"]
-            if band.startswith("Above")
-            else ELECTRICITY["hu_below_average_huf"]
-        )
-        petrol = b.number_input(
+        b.number_input(
             "Petrol car (L/100 km)",
             3.0,
             15.0,
             default.petrol_l_per_100km,
             0.5,
+            key="cost-petrol",
             help="A comparable compact petrol SUV uses about 6-7 L/100 km.",
         )
-        diesel = c.number_input("Diesel car (L/100 km)", 3.0, 15.0, default.diesel_l_per_100km, 0.5)
-        loss = a.slider(
+        c.number_input("Diesel car (L/100 km)", 3.0, 15.0, default.diesel_l_per_100km, 0.5, key="cost-diesel")
+        a.slider(
             "Charging loss (%)",
             0,
             25,
             int(default.charging_loss_pct),
+            key="cost-loss",
             help="Not all electricity from the wall reaches the battery: the charger and cables turn some "
             "into heat. At home on 11 kW AC about 8-12 % is lost, so you pay for about 10 % more than the "
             "car stores.",
         )
-    return queries.CostAssumptions(petrol, diesel, float(loss), hu_price, default.at_electricity_eur)
 
 
 def own_car(monthly: pd.DataFrame) -> None:
@@ -79,9 +92,7 @@ def render(con, period: queries.Period) -> None:
     if week is None:
         empty("No fuel prices yet: `kiatracker refresh` fetches them from the EU Weekly Oil Bulletin.")
         return
-    assume = queries.CostAssumptions()
-    if "cost-assumptions" in st.session_state:
-        assume = st.session_state["cost-assumptions"]
+    assume = current_assumptions(st.session_state)
 
     with card("savings"):
         left, right = st.columns([3, 2], vertical_alignment="center")
@@ -147,5 +158,5 @@ def render(con, period: queries.Period) -> None:
                 lambda v: f"€ {v:.2f}",
             )
         )
-    st.session_state["cost-assumptions"] = assumptions()
+    assumptions()
     own_car(monthly)

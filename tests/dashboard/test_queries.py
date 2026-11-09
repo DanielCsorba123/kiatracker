@@ -273,3 +273,20 @@ def test_bucket_labels():
     assert q.bucket_label("2026-W45", "week") == "the week of 2 Nov"
     assert q.bucket_label("2026-10", "month") == "October"
     assert q.bucket_label("2025", "year") == "2025"
+
+
+def test_usual_level_clamped_to_the_latest_reading_says_so(sessions_db):
+    con = sessions_db(ends=[70] * 6, kw=[7.4] * 6)
+    u = q.usual_charge_level(con, latest_soc=88.6)
+    assert (u.level, u.clamped, u.assumed) == (89, True, False)
+
+
+def test_few_sessions_but_a_high_reading_is_clamped_not_assumed(sessions_db):
+    con = sessions_db(ends=[80, 80, 80], kw=[7.4] * 3)
+    u = q.usual_charge_level(con, latest_soc=90)
+    assert (u.level, u.clamped) == (90, True)
+
+
+def test_tips_skip_the_home_share_without_zones(sessions_db, all_time):
+    con = sessions_db(ends=[80] * 6, kw=[7.4] * 6, zone=None)
+    assert all("at home" not in text for _, _, text in q.tips_facts(con, all_time, [], date.today()))

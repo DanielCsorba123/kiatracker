@@ -9,7 +9,7 @@ import streamlit as st
 from kiatracker.config import load_settings
 from kiatracker.dashboard.queries import connect
 from kiatracker.dashboard.source import build_demo_database, may_show_personal, resolve_source
-from kiatracker.dashboard.ui import BRAND, LOGO, demo_strip, inject_style, period_control
+from kiatracker.dashboard.ui import BRAND, LOGO, PERIOD_PAGES, demo_strip, inject_style, period_control
 from kiatracker.dashboard.views import charging, costs, drives, overview, routes
 from kiatracker.dashboard.views import range as range_page
 from kiatracker.showcase import load_status
@@ -51,8 +51,10 @@ def demo_banner(status: dict | None) -> str:
     )
 
 
-def page_runner(module, db_path, period):
+def page_runner(module, db_path, default_days):
     def run():
+        name = module.__name__.split(".")[-1]
+        period = period_control(default_days) if name in PERIOD_PAGES else None
         with connect(db_path) as con:
             module.render(con, period)
 
@@ -78,11 +80,11 @@ def main() -> None:
         st.stop()
 
     st.logo(str(LOGO), size="large")
-    period = period_control(365 if source.demo else 30)  # the demo has a whole year to show
+    default_days = 365 if source.demo else 30  # the demo has a whole year to show
 
     pages = [
         st.Page(
-            page_runner(module, db_path, period),
+            page_runner(module, db_path, default_days),
             title=title,
             url_path=module.__name__.split(".")[-1],
         )

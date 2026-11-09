@@ -26,20 +26,30 @@ def cached_train(key: tuple, _con) -> Trained:
 
 
 def forecast_hourly(con) -> dict | None:
-    """The forecast table in the shape the outlook expects."""
+    """The forecast table in the shape the outlook expects. A database built before the cloud and rain
+    columns existed still works: those come back empty until the next `kiatracker build`."""
+    columns = {
+        c
+        for (c,) in con.execute(
+            "select column_name from information_schema.columns where table_name = 'forecast_hourly'"
+        ).fetchall()
+    }
+    if not columns:
+        return None
+    extra = [c if c in columns else f"null as {c}" for c in ("cloud_pct", "rain_prob_pct")]
     rows = con.execute(
-        "select ts, temp_c, wind_kph, wind_dir_deg, cloud_pct, rain_prob_pct from forecast_hourly order by ts"
+        f"select ts, temp_c, wind_kph, wind_dir_deg, {', '.join(extra)} from forecast_hourly order by ts"
     ).fetchall()
     if not rows:
         return None
-    columns = list(zip(*rows, strict=True))
+    cols = list(zip(*rows, strict=True))
     return {
-        "time": [ts.strftime("%Y-%m-%dT%H:%M") for ts in columns[0]],
-        "temperature_2m": list(columns[1]),
-        "wind_speed_10m": list(columns[2]),
-        "wind_direction_10m": list(columns[3]),
-        "cloud_cover": list(columns[4]),
-        "precipitation_probability": list(columns[5]),
+        "time": [ts.strftime("%Y-%m-%dT%H:%M") for ts in cols[0]],
+        "temperature_2m": list(cols[1]),
+        "wind_speed_10m": list(cols[2]),
+        "wind_direction_10m": list(cols[3]),
+        "cloud_cover": list(cols[4]),
+        "precipitation_probability": list(cols[5]),
     }
 
 
@@ -52,7 +62,13 @@ def weather_now(hourly: dict | None) -> tuple[float, float] | None:
     i = min(range(len(times)), key=lambda n: abs(times[n] - now))
     if abs(times[i] - now) > timedelta(hours=2):
         return None
-    return hourly["temperature_2m"][i], hourly["wind_speed_10m"][i]
+    temp, wind = hourly["temperature_2m"][i], hourly["wind_speed_10m"][i]
+    return None if temp is None or wind is None else (temp, wind)
+
+
+def has_range(outlook: list[dict]) -> bool:
+    """True if any day has a range (today may lack one when there is no battery reading)."""
+    return any(r.get("range_km") is not None for r in outlook)
 
 
 def km_range(lo, mid, hi) -> str:
@@ -113,7 +129,7 @@ def render(con, period: queries.Period) -> None:
             if hourly
             else []
         )
-        if outlook and outlook[0]["range_km"] is not None:
+        if has_range(outlook):
             scale = max(r["mild_km"] or 0 for r in outlook) * 1.05
             render_html(
                 components.rule_line(soc, usual, full) + components.forecast_rows(outlook, scale, today)

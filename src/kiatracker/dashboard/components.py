@@ -127,6 +127,11 @@ def rule_line(soc_today: float | None, usual, full: bool) -> str:
     )
     if full:
         rest = "The coming days assume a full charge."
+    elif getattr(usual, "clamped", False):
+        rest = (
+            f"The coming days assume at least today's {usual.level} %: the battery already holds more than "
+            "you usually charge to."
+        )
     elif usual.assumed:
         rest = (
             "The coming days assume an 80 % charge until there are enough charging sessions to learn yours."
@@ -183,12 +188,14 @@ def hero(
     )
 
 
-def battery_card(soc: float | None, year_km: float, avg: float | None, saved_ft: float | None) -> str:
+def battery_card(
+    soc: float | None, km: float, avg: float | None, saved_ft: float | None, period_label: str = "This year"
+) -> str:
     width = 0 if soc is None else max(0.0, min(100.0, soc))
     cells = "".join(
         f'<div><span class="wr-note" style="font-size: 12px">{k}</span><b>{e(v)}</b></div>'
         for k, v in (
-            ("This year", f"{year_km:,.0f} km".replace(",", " ")),
+            (period_label, f"{km:,.0f} km".replace(",", " ")),
             ("Average", "–" if avg is None else f"{avg:.1f} kWh"),
             (
                 "Saved",
@@ -295,7 +302,11 @@ def drive_list(df) -> str:
         kwh = r.kwh_per_100km
         tag = chip(f"{kwh:.1f} kWh/100", "coral" if kwh >= 19 else "sky") if _known(kwh) else ""
         temp = f"{r.temp_c:.0f} °C" if _known(r.temp_c) else ""
-        zones = f"{str(r.start_zone).capitalize()} → {str(r.end_zone).capitalize()}"
+        zones = (
+            f"{str(r.start_zone).capitalize()} → {str(r.end_zone).capitalize()}"
+            if _known(r.start_zone) and _known(r.end_zone)
+            else "Drive"
+        )
         out.append(
             f'<div class="row"><span class="wr-note">{e(r.time)}</span><span class="z">{e(zones)}</span>'
             f'<span class="km">{r.distance_km:.1f} km</span><span class="tag">{tag}</span>'

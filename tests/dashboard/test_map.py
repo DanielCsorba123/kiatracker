@@ -55,3 +55,9 @@ def test_maplibre_is_vendored_with_its_licence():
     assert (STATIC / "maplibre" / "maplibre-gl.js").stat().st_size > 100_000
     assert (STATIC / "maplibre" / "maplibre-gl.css").exists()
     assert (STATIC / "maplibre" / "LICENSE.txt").exists()
+
+
+def test_a_single_tile_error_does_not_replace_the_basemap():
+    out = page()
+    assert "tileErrors" in out and "e.tile" in out
+    assert "if (!map.getStyle() || !map.getStyle().sources" in out  # blank fallback only without a style
