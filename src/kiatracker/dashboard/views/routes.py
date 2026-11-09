@@ -9,8 +9,8 @@ import pydeck as pdk
 import streamlit as st
 
 from kiatracker.config import load_settings
-from kiatracker.dashboard import charts, queries
-from kiatracker.dashboard.ui import number, page_header
+from kiatracker.dashboard import charts, components, queries
+from kiatracker.dashboard.ui import card, number, render_html
 from kiatracker.dashboard.views.drives import cached_model
 from kiatracker.dashboard.views.range import fingerprint
 from kiatracker.elevation import Terrain, download_tile
@@ -24,6 +24,8 @@ from kiatracker.route_energy import (
     compare_routes,
     differences,
     energy_breakdown,
+    rival_first,
+    win_shares,
 )
 
 DEFAULT_CAPACITY_KWH = EV3.usable_kwh
@@ -66,7 +68,7 @@ def form(soc_now: float | None) -> dict | None:
         cap = d.selectbox("Speed cap", list(CAPS), help="Lever: what slowing down on fast roads saves.")
         pace = st.slider("Your pace vs typical road speeds", 80, 120, 100, 5, format="%d %%",
                          help="Lever: above 100 % if you usually drive faster than traffic.")  # fmt: skip
-        if not st.form_submit_button("Compare routes", type="primary"):
+        if not st.form_submit_button("Compare", type="primary"):
             return None
     lines = [tuple(p.strip() for p in line.split(";") if p.strip()) for line in vias.splitlines()]
     return {
@@ -80,33 +82,15 @@ def form(soc_now: float | None) -> dict | None:
     }
 
 
-def table(comparison: Comparison) -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "Route": e.route.label,
-            "Roads": e.route.roads,
-            "Distance": e.km,
-            "Time": e.minutes,
-            "Energy": e.kwh_p50,
-            "80 % range": f"{e.kwh_p10:.1f}–{e.kwh_p90:.1f}",
-            "Arrive with": e.arrival_soc_p50,
-            "Above 10 %": e.p_reserve,
-            "Climbing": e.climb_m,
-        }
-        for e in comparison.estimates
-    )
-
-
-def profiles(comparison: Comparison, model) -> pd.DataFrame:
+def profiles(estimates) -> pd.DataFrame:
     frames = []
-    for e in comparison.estimates:
+    for e in estimates:
         cond = e.conditions
         frames.append(
             pd.DataFrame(
                 {
                     "route": e.route.label,
                     "km": list(accumulate(x.km for x in cond)),
-                    "kwh": list(accumulate(sum(energy_breakdown([x], model).values()) for x in cond)),
                     "height": list(accumulate(x.climb_m - x.descent_m for x in cond)),
                 }
             )
@@ -114,16 +98,16 @@ def profiles(comparison: Comparison, model) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def route_map(comparison: Comparison) -> None:
+def route_map(estimates) -> None:
     paths = [
         {
             "route": e.route.label,
             "path": [[lon, lat] for lat, lon in e.route.points],
             "color": RGB[i % len(RGB)],
         }
-        for i, e in enumerate(comparison.estimates)
+        for i, e in enumerate(estimates)
     ]
-    points = [p for e in comparison.estimates for p in e.route.points]
+    points = [p for e in estimates for p in e.route.points]
     view = pdk.ViewState(
         latitude=sum(p[0] for p in points) / len(points),
         longitude=sum(p[1] for p in points) / len(points),
@@ -135,9 +119,10 @@ def route_map(comparison: Comparison) -> None:
 
 
 def render(con, period: queries.Period) -> None:
-    page_header("Routes", "Which way costs the least energy, in the weather forecast for when you drive.")
+    render_html(components.hidden_title("Routes"))
     soc_now, capacity = car_state(con)
-    request = form(soc_now)
+    with card("form"):
+        request = form(soc_now)
     if request is None:
         st.caption(
             "Each route is cut into ~1 km pieces. Every piece gets the forecast for the hour you'd drive "
@@ -162,48 +147,43 @@ def render(con, period: queries.Period) -> None:
         st.warning("No route found between these places.")
         return
 
-    st.subheader(f"{comparison.origin.name} → {comparison.destination.name}")
-    st.dataframe(
-        table(comparison),
-        hide_index=True,
-        use_container_width=True,
-        column_config={
-            "Distance": st.column_config.NumberColumn(format="%.0f km"),
-            "Time": st.column_config.NumberColumn(format="%.0f min"),
-            "Energy": st.column_config.NumberColumn(
-                help="Most likely energy for the route", format="%.1f kWh"
-            ),
-            "Arrive with": st.column_config.NumberColumn(format="%.0f %%"),
-            "Above 10 %": st.column_config.ProgressColumn(
-                "Odds ≥ 10 %",
-                help="Chance of arriving with at least 10 % charge, over 1,000 simulated days",
-                format="percent",
-                min_value=0,
-                max_value=1,
-            ),
-            "Climbing": st.column_config.NumberColumn(format="%.0f m"),
-        },
-    )
-    for line in differences(comparison.estimates):
-        st.markdown(f"- {line}")
-    if not all(e.weather_complete for e in comparison.estimates):
+    estimates = rival_first(comparison.estimates)  # the chosen route and its closest rival lead
+    colours = [charts.ROUTE_COLOURS[i % len(charts.ROUTE_COLOURS)] for i in range(len(estimates))]
+    route_map(estimates)
+    render_html(components.route_cards(estimates, win_shares(estimates), colours))
+    if not all(e.weather_complete for e in estimates):
         st.warning("The forecast was missing for part of the way; those pieces assume 10 °C and no wind.")
 
-    parts = pd.DataFrame(
-        [
-            {"route": e.route.label, "cause": k, "kwh": v}
-            for e in comparison.estimates
-            for k, v in e.breakdown.items()
-        ]
-    )
-    st.altair_chart(charts.route_breakdown(parts), use_container_width=True)
-    profile = profiles(comparison, model)
-    left, right = st.columns(2)
-    left.altair_chart(charts.route_profile(profile, "kwh", "Energy used along the way", "kWh"),
-                      use_container_width=True)  # fmt: skip
-    right.altair_chart(charts.route_profile(profile, "height", "Height along the way", "m from the start"),
-                       use_container_width=True)  # fmt: skip
-    route_map(comparison)
+    first = estimates[0]
+    with card("heights"):
+        st.html(components.section_title("Up and down along the way", "first route in coral, second in blue"))
+        st.altair_chart(charts.route_heights(profiles(estimates)), width="stretch")
+        parts_first = energy_breakdown(first.conditions, model)
+        st.caption(
+            f"{first.route.label}: the climbs cost about {parts_first.get('climb', 0.0):.1f} kWh; "
+            f"rolling down gives {abs(parts_first.get('regen', 0.0)):.1f} kWh back."
+        )
+    if len(estimates) > 1:
+        parts = pd.DataFrame(
+            [
+                {"route": e.route.label, "cause": k, "kwh": v}
+                for e in estimates[:2]
+                for k, v in e.breakdown.items()
+            ]
+        )
+        with card("difference"):
+            st.html(
+                components.section_title(
+                    "Why they differ", f"{first.route.label} compared with {estimates[1].route.label}"
+                )
+            )
+            left, right = st.columns([3, 2], gap="large", vertical_alignment="center")
+            left.altair_chart(
+                charts.route_difference(parts, first.route.label, estimates[1].route.label), width="stretch"
+            )
+            lines = differences(estimates)
+            if lines:
+                right.html(f'<div class="wr-callout">{components.e(lines[0])}</div>')
 
     with st.expander("How this is calculated"):
         which = (

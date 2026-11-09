@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -9,8 +10,10 @@ from kiatracker.route_energy import (
     differences,
     energy_breakdown,
     estimate,
+    rival_first,
     simulate,
     weather_cells,
+    win_shares,
 )
 from kiatracker.routing import Piece, Route
 
@@ -114,3 +117,42 @@ def test_battery_reading_noise_of_short_drives_is_not_charged_to_long_trips():
     assert model_error_sd(noisy) == pytest.approx(0.4 * 8 / 2.563)  # floor: 40 % kept
     clean = RangeModel(MODEL.coef, -4.0, 4.0, 20, "x", median_km=40.0)  # reading noise 1.0
     assert model_error_sd(clean) == pytest.approx((3.121**2 - 1.0) ** 0.5, rel=0.01)
+
+
+@pytest.fixture
+def two_routes():
+    flat = [piece(i + 1, 47.0, km=5.0) for i in range(20)]
+    weather = {(47.0, 18.0): hourly([5.0] * 24)}
+    a = estimate(
+        Route("Flat", 100.0, 100.0, [(47.0, 18.0)], [100.0], [6000.0]), flat, levers(), weather, None, MODEL
+    )
+    b = estimate(
+        Route("Hilly", 95.0, 95.0, [(47.0, 18.0)], [95.0], [5700.0]),
+        flat[:19],
+        levers(),
+        weather,
+        Ramp(),
+        MODEL,
+    )
+    return a, b
+
+
+def test_win_shares_sum_to_one_and_follow_the_draws(two_routes):
+    shares = win_shares(list(two_routes))
+    assert sum(shares) == pytest.approx(1) and shares[0] > shares[1]
+
+
+def test_win_shares_without_draws_pick_the_lowest_median(two_routes):
+    a, b = (replace(e, draws=None) for e in two_routes)
+    assert win_shares([b, a]) == [0.0, 1.0]
+
+
+def test_win_shares_single_route(two_routes):
+    assert win_shares([two_routes[0]]) == [1.0]
+
+
+def test_rival_first_puts_the_closest_alternative_second(two_routes):
+    a, b = two_routes
+    far = replace(b, kwh_p50=b.kwh_p50 + 10, route=replace(b.route, label="Far"))
+    assert [e.route.label for e in rival_first([a, far, b])] == ["Flat", "Hilly", "Far"]
+    assert rival_first([a]) == [a]

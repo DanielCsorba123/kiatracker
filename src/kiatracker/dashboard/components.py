@@ -391,3 +391,16 @@ def compare_bars(items: list[tuple[str, float, str, str]], unit) -> str:
         for name, v, note, colour in items
     )
     return f'<div class="wr-compare">{rows}</div>'
+
+
+def route_cards(estimates, shares: list[float], colours: list[str]) -> str:
+    """One card per route: name, how often it wins, energy, time, distance, arrival charge, roads, climb."""
+    cards = "".join(
+        f'<div class="wr-route"><div class="head"><span class="dot" style="background: {e(colour)}"></span>'
+        f'<b>{e(est.route.label)}</b><span class="wins">wins {round(100 * share)} of 100</span></div>'
+        f'<span class="big">{est.kwh_p50:.1f} kWh</span>'
+        f"<span>{est.minutes:.0f} min · {est.km:.0f} km · arrive at {est.arrival_soc_p50:.0f} %</span>"
+        f'<span class="wr-note">{e(est.route.roads)} · climbs {est.climb_m:.0f} m</span></div>'
+        for est, share, colour in zip(estimates, shares, colours, strict=False)
+    )
+    return f'<div class="wr-routes" style="--n: {max(1, len(estimates))}">{cards}</div>'

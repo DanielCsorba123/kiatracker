@@ -393,7 +393,7 @@ def histogram(
     )
 
 
-ROUTE_COLOURS = [SKY, CORAL, PALE, "#8a63d2", "#c9a227"]
+ROUTE_COLOURS = [CORAL, SKY, PALE, theme.SUN, theme.SKY_INK]  # the chosen route first, in coral
 CAUSE_COLOURS = ["#6f8fb5", "#9aa6b8", SKY, "#5bc0eb", CORAL, "#e34948", "#8a63d2", PALE]
 
 
@@ -556,3 +556,102 @@ def savings_bars(df: pd.DataFrame) -> alt.LayerChart:
         color=alt.condition("datum.highlight", alt.value(theme.INK), alt.value(MUTED)),
     )
     return (bars + labels).properties(height=HEIGHT - 70)
+
+
+@styled
+def route_heights(profile: pd.DataFrame) -> alt.LayerChart:
+    """Height above the start along each route on one distance axis. The first route is a coral area,
+    the second a sky area, the rest dashed; the two highest points are labelled.
+    Columns: route, km, height."""
+    routes = list(dict.fromkeys(profile["route"]))
+    x = alt.X("km:Q", title="km from the start", axis=alt.Axis(grid=False))
+    y = alt.Y("height:Q", title="m above the start")
+    layers = []
+    for i, name in enumerate(routes):
+        part = profile[profile["route"] == name]
+        tip = [
+            alt.Tooltip("route:N", title="Route"),
+            _tip("km:Q", "km"),
+            _tip("height:Q", "m above the start"),
+        ]
+        if i < 2:
+            colour, opacity, width = (CORAL, 0.16, 3) if i == 0 else (SKY, 0.10, 2.5)
+            area = alt.Chart(part).mark_area(color=colour, opacity=opacity, interpolate="monotone")
+            layers.append(area.encode(x=x, y=y))
+            line = alt.Chart(part).mark_line(color=colour, strokeWidth=width, interpolate="monotone")
+        else:
+            line = alt.Chart(part).mark_line(
+                color=PALE, strokeWidth=1.5, strokeDash=[4, 4], interpolate="monotone"
+            )
+        layers.append(line.encode(x=x, y=y, tooltip=tip))
+    notes = []
+    for i, name in enumerate(routes[:2]):
+        top = profile[profile["route"] == name].sort_values("height").iloc[-1]
+        text = (
+            f"+{top['height']:.0f} m · highest point, km {top['km']:.0f}"
+            if i == 0
+            else f"{name}: never above +{top['height']:.0f} m"
+        )
+        notes.append({"km": top["km"], "height": top["height"], "text": text, "first": i == 0})
+    marks = pd.DataFrame(notes)
+    if not marks.empty:
+        layers.append(
+            alt.Chart(marks[marks["first"]])
+            .mark_point(filled=True, size=70, color=theme.CARD, stroke=CORAL, strokeWidth=2.5)
+            .encode(x="km:Q", y="height:Q")
+        )
+        layers.append(
+            alt.Chart(marks)
+            .mark_text(
+                align="left", dx=10, dy=alt.ExprRef("datum.first ? -10 : -26"), fontSize=13, fontWeight=600
+            )
+            .encode(
+                x="km:Q",
+                y="height:Q",
+                text="text:N",
+                color=alt.condition("datum.first", alt.value(theme.INK), alt.value(theme.SKY_INK)),
+            )
+        )
+    top = float(profile["height"].max()) if not profile.empty else 0.0
+    chart = alt.layer(*layers).resolve_scale(y="shared").properties(height=HEIGHT - 20)
+    return chart.encode(y=alt.Y("height:Q", scale=alt.Scale(domainMax=top * 1.2 + 20)))
+
+
+@styled
+def route_difference(parts: pd.DataFrame, first: str, second: str) -> alt.LayerChart:
+    """Cause by cause, kWh of `first` minus `second`: coral costs more, sky saves; the net underneath.
+    Columns: route, cause, kwh."""
+    a = parts[parts["route"] == first].groupby("cause")["kwh"].sum()
+    b = parts[parts["route"] == second].groupby("cause")["kwh"].sum()
+    diff = a.subtract(b, fill_value=0)
+    diff = diff[diff.abs() >= 0.05]
+    data = pd.DataFrame(
+        {
+            "cause": [CAUSES.get(c, c) for c in diff.index],
+            "kwh": diff.values,
+            "label": [f"{v:+.1f}" for v in diff.values],
+        }
+    )
+    net = float(a.sum() - b.sum())
+    y = alt.Y("cause:N", title=None, sort=None, axis=alt.Axis(labelLimit=220, labelFontSize=13))
+    bars = (
+        alt.Chart(data)
+        .mark_bar(height=18)
+        .encode(
+            x=alt.X("kwh:Q", title=f"kWh, {first} minus {second}"),
+            y=y,
+            color=alt.condition("datum.kwh > 0", alt.value(CORAL), alt.value(SKY)),
+            tooltip=[alt.Tooltip("cause:N", title="Cause"), alt.Tooltip("kwh:Q", title="kWh", format="+.1f")],
+        )
+    )
+    labels = (
+        alt.Chart(data)
+        .mark_text(fontSize=12, color=MUTED, dx=alt.ExprRef("datum.kwh > 0 ? 18 : -18"))
+        .encode(x="kwh:Q", y=y, text="label:N")
+    )
+    zero = alt.Chart(pd.DataFrame({"x": [0]})).mark_rule(color=theme.INK).encode(x="x:Q")
+    title = f"Net: {first} uses {abs(net):.1f} kWh {'less' if net < 0 else 'more'}"
+    return alt.layer(bars, labels, zero).properties(
+        title=alt.Title(title, anchor="start", fontSize=14, font=theme.SANS, fontWeight=600),
+        height=40 * max(1, len(data)),
+    )

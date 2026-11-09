@@ -270,3 +270,34 @@ def test_savings_bars_highlight_the_last_complete_bucket():
     spec = charts.savings_bars(df).to_dict()
     text = str(spec)
     assert charts.CORAL in text and charts.PALE in text and "60k" in text
+
+
+PROFILE = pd.DataFrame(
+    {
+        "route": ["Fastest"] * 3 + ["Through Vienna"] * 3 + ["Via Vösendorf"] * 3,
+        "km": [0, 60, 122, 0, 70, 140, 0, 70, 147],
+        "height": [0, 372, 80, 0, 130, 60, 0, 380, 70],
+    }
+)
+
+
+def test_route_heights_label_the_highest_points():
+    spec = str(charts.route_heights(PROFILE).to_dict())
+    assert "+372 m · highest point, km 60" in spec and "Through Vienna: never above +130 m" in spec
+    assert charts.CORAL in spec and charts.SKY in spec
+
+
+def test_route_difference_net_and_signs():
+    parts = pd.DataFrame(
+        {
+            "route": ["A", "A", "B", "B"],
+            "cause": ["base", "climb", "base", "climb"],
+            "kwh": [20.0, 4.0, 22.9, 1.6],
+        }
+    )
+    spec = str(charts.route_difference(parts, "A", "B").to_dict())
+    assert "Net: A uses 0.5 kWh less" in spec and charts.CORAL in spec and charts.SKY in spec
+
+
+def test_route_colours_put_the_chosen_route_in_coral():
+    assert charts.ROUTE_COLOURS[:3] == [charts.CORAL, charts.SKY, charts.PALE]

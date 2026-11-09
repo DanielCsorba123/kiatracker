@@ -276,3 +276,13 @@ def test_compare_bars_scale_to_the_largest():
         lambda v: f"{v:.0f} Ft",
     )
     assert "width: 20%" in out and "width: 100%" in out and "3480 Ft" in out
+
+
+def test_route_cards_escape_typed_names():
+    from types import SimpleNamespace
+
+    route = SimpleNamespace(label="<img src=x>", roads="A2 & S6")
+    e = SimpleNamespace(route=route, kwh_p50=26.4, minutes=84, km=122, arrival_soc_p50=56, climb_m=772)
+    out = components.route_cards([e], [1.0], ["#DC756D"])
+    assert "<img" not in out and "A2 &amp; S6" in out and "wins 100 of 100" in out
+    assert "26.4 kWh" in out and "arrive at 56 %" in out and "climbs 772 m" in out

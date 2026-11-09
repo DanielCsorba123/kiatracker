@@ -203,6 +203,16 @@ h1, h2, h3 {{ font-family: "{t.SERIF}", serif; font-weight: 400; letter-spacing:
   .wr-compare .row {{ grid-template-columns: 1fr 90px; }}
   .wr-compare .track {{ grid-column: 1 / -1; order: 3; }}
 }}
+.wr-routes {{ display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 18px; }}
+.wr-route {{ background: {t.CARD}; border-radius: 24px; padding: 20px; box-shadow: {t.SHADOW}; display: flex; flex-direction: column; gap: 8px; }}
+.wr-route .head {{ display: flex; align-items: center; gap: 10px; }}
+.wr-route .dot {{ width: 12px; height: 12px; border-radius: 50%; }}
+.wr-route .wins {{ margin-left: auto; font-size: 13px; color: {t.MUTED}; background: {t.PAPER}; padding: 3px 10px; border-radius: 999px; }}
+.wr-route .big {{ font-family: "{t.SERIF}", serif; font-size: 34px; }}
+.wr-route > span:not(.big) {{ font-size: 14px; color: {t.INK_SOFT}; }}
+@media (max-width: 640px) {{ .wr-routes {{ grid-template-columns: 1fr; }} }}
+.wr-callout {{ background: {t.TINT_CORAL}; border-radius: 18px; padding: 20px 22px; font-size: 15px; line-height: 1.55; color: {t.INK_SOFT}; }}
+.stFormSubmitButton button p, .stButton button[kind="primary"] p {{ color: {t.CARD}; }}
 .wr-hidden {{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
               white-space: nowrap; }}
 @media (max-width: 640px) {{
