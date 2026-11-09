@@ -150,3 +150,71 @@ def whatif_result(lo: float, mid: float, hi: float, best_km: float) -> str:
         '<span class="wr-note" style="font-size: 12px">'
         f"of the EV3's best case, {best_km:.0f} km</span></div>"
     )
+
+
+def greeting(local_hour: int) -> str:
+    if 5 <= local_hour < 12:
+        return "Good morning"
+    return "Good afternoon" if 12 <= local_hour < 18 else "Good evening"
+
+
+def wind_words(kph: float) -> str:
+    return "a light" if kph < 12 else "a moderate" if kph < 25 else "a strong"
+
+
+def hero(
+    greeting_line: str,
+    range_km: float | None,
+    lo: float | None,
+    hi: float | None,
+    soc: float | None,
+    comparison: str | None,
+) -> str:
+    if range_km is None:
+        title = "Your range appears once the model has enough drives."
+        body = ""
+    else:
+        title = f'You can drive about <span style="color: {theme.CORAL}">{range_km:.0f} km</span> today.'
+        battery = f", from {soc:.0f} % battery" if soc is not None else ""
+        body = f"Somewhere between {lo:.0f} and {hi:.0f}{battery}." + (f" {comparison}" if comparison else "")
+    return (
+        f'<div class="wr-hero"><span class="wr-note" style="font-size: 15px">{e(greeting_line)}</span>'
+        f"<h2>{title}</h2><p>{e(body)}</p></div>"
+    )
+
+
+def battery_card(soc: float | None, year_km: float, avg: float | None, saved_ft: float | None) -> str:
+    width = 0 if soc is None else max(0.0, min(100.0, soc))
+    cells = "".join(
+        f'<div><span class="wr-note" style="font-size: 12px">{k}</span><b>{e(v)}</b></div>'
+        for k, v in (
+            ("This year", f"{year_km:,.0f} km".replace(",", " ")),
+            ("Average", "–" if avg is None else f"{avg:.1f} kWh"),
+            (
+                "Saved",
+                "–" if saved_ft is None else f"{round(saved_ft, -3) / 1000:,.0f}k Ft".replace(",", " "),
+            ),
+        )
+    )
+    return (
+        f'<div class="wr-card wr-battery"><div class="top"><b class="lbl">Battery</b>'
+        f'<span class="big">{"–" if soc is None else f"{soc:.0f} %"}</span></div>'
+        f'<div class="track"><i style="width: {width:.0f}%"></i></div><div class="cells">{cells}</div></div>'
+    )
+
+
+def week_strip(rows: list[dict], today) -> str:
+    cells = []
+    for r in rows:
+        if r.get("range_km") is None:
+            continue
+        is_today = r["day"] == today
+        style = f' style="background: {theme.TINT_CORAL}"' if is_today else ""
+        cells.append(
+            f'<div class="day"{style}><span class="wr-note">'
+            f"{'Today' if is_today else e(r['day'].strftime('%a'))}"
+            f'</span><span aria-hidden="true">{SKY_ICONS.get(r.get("sky"), "")}</span>'
+            f'<b>{r["temp_max"]:.0f}°</b><span class="km">{r["range_km"]:.0f}</span>'
+            '<span class="wr-note" style="font-size: 11px">km range</span></div>'
+        )
+    return f'<div class="wr-week">{"".join(cells)}</div>'

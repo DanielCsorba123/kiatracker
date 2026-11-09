@@ -234,5 +234,18 @@ def test_route_profile_has_one_colour_per_route():
 
 def test_house_uses_tokens_and_no_title():
     spec = charts.bar(DF, "week:T", "km:Q", None, "km").to_dict()
+    assert spec["config"]["background"] == "transparent"  # the white card shows through
     assert spec["config"]["font"] == "Hanken Grotesk" and "title" not in spec
     assert spec["config"]["axis"]["gridColor"] == charts.theme.RULE
+
+
+def test_monthly_use_highlights_months_10pct_above_mean():
+    df = pd.DataFrame({"month": ["2026-01", "2026-06", "2026-07"], "kwh_per_100km": [21.4, 14.9, 15.2]})
+    spec = str(charts.monthly_use(df).to_dict())
+    assert charts.CORAL in spec and charts.PALE in spec
+    assert "timeFormat" in spec  # month names on the axis
+
+
+def test_weekly_distance_highlights_the_last_week():
+    spec = charts.weekly_distance(DF.rename(columns={"km": "distance_km"})).to_dict()
+    assert charts.CORAL in str(spec) and "tooltip" in str(spec)

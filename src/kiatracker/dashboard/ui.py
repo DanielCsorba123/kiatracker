@@ -107,6 +107,28 @@ h1, h2, h3 {{ font-family: "{t.SERIF}", serif; font-weight: 400; letter-spacing:
   .wr-day {{ grid-template-columns: 64px minmax(0, 1fr) 90px; }}
   .wr-day .bar {{ grid-column: 1 / -1; order: 4; }}
 }}
+.wr-hero {{ display: flex; flex-direction: column; gap: 14px; }}
+.wr-hero h2 {{ margin: 0; font-family: "{t.SERIF}", serif; font-weight: 400; font-size: 56px;
+               line-height: 1.08;
+               color: {t.INK}; }}
+.wr-hero p {{ margin: 0; font-size: 18px; line-height: 1.6; color: {t.INK_SOFT}; }}
+.wr-battery {{ padding: 26px; display: flex; flex-direction: column; gap: 14px; }}
+.wr-battery .top {{ display: flex; justify-content: space-between; align-items: baseline; }}
+.wr-battery .big {{ font-family: "{t.SERIF}", serif; font-size: 28px; }}
+.wr-battery .track {{ height: 14px; border-radius: 999px; background: {t.WASH}; overflow: hidden; }}
+.wr-battery .track i {{ display: block; height: 100%; border-radius: 999px;
+                        background: linear-gradient(90deg, {t.SKY}, #7FB5DB); }}
+.wr-battery .cells {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }}
+.wr-battery .cells div {{ display: flex; flex-direction: column; gap: 2px; }}
+.wr-battery .cells b {{ font-family: "{t.SERIF}", serif; font-weight: 400; font-size: 22px; }}
+.wr-week {{ display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }}
+.wr-week .day {{ display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 6px;
+                 border-radius: 16px; }}
+.wr-week .day .km {{ font-family: "{t.SERIF}", serif; font-size: 20px; }}
+@media (max-width: 640px) {{
+  .wr-hero h2 {{ font-size: 38px; }}
+  .wr-week {{ grid-template-columns: repeat(4, minmax(0, 1fr)); }}
+}}
 .wr-hidden {{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
               white-space: nowrap; }}
 @media (max-width: 640px) {{

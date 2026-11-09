@@ -324,3 +324,79 @@ def usual_charge_level(con, latest_soc: float | None) -> UsualCharge:
     if latest_soc is not None:
         level = max(level, round(latest_soc))
     return UsualCharge(min(level, 100), len(rounded), at_level, assumed)
+
+
+def monthly(con, period: Period) -> pd.DataFrame:
+    """Distance and distance-weighted consumption per local month (drives with a measured consumption)."""
+    d = _drives(con, period)
+    d["month"] = d["start_local"].dt.strftime("%Y-%m")
+    d["measured_km"] = d["distance_km"].where(d["kwh_per_100km"].notna(), 0)
+    d["measured_kwh"] = d["energy_kwh"].where(d["kwh_per_100km"].notna(), 0)
+    g = d.groupby("month", as_index=False)[["distance_km", "measured_km", "measured_kwh"]].sum()
+    g["kwh_per_100km"] = (g["measured_kwh"] / g["measured_km"] * 100).where(g["measured_km"] > 0)
+    return g[["month", "distance_km", "kwh_per_100km"]]
+
+
+def commute_pair(con, period: Period) -> tuple[str, str, float] | None:
+    """The most frequent trip between two different zones, and its median distance in km."""
+    d = _drives(con, period)
+    d = d[d["start_zone"].notna() & d["end_zone"].notna() & (d["start_zone"] != d["end_zone"])]
+    if d.empty:
+        return None
+    counts = d.groupby(["start_zone", "end_zone"]).size().sort_values(ascending=False)
+    start, end = counts.index[0]
+    km = d[(d["start_zone"] == start) & (d["end_zone"] == end)]["distance_km"].median()
+    return start, end, float(km)
+
+
+def _zones(start: str, end: str) -> str:
+    return f"{start.capitalize()} → {end.capitalize()}"
+
+
+def tips_facts(con, period: Period, outlook: list[dict], today: date) -> list[tuple[str, str, str]]:
+    """Up to three 'worth knowing' tips, each only when its condition holds: (icon, tint, sentence)."""
+    from kiatracker.dashboard import theme
+
+    tips = []
+    soon = [r["temp_min"] for r in outlook[:3] if r.get("temp_min") is not None]
+    if soon and min(soon) < 5:
+        pair = commute_pair(con, period)
+        saving = round(0.8 * (pair[2] / 30 if pair else 1), 1)
+        tips.append(
+            (
+                "❄",
+                theme.TINT_SKY,
+                f"Below 5 °C, pre-heat while plugged in: about {saving:.1f} kWh saved on your commute.",
+            )
+        )
+    week = Period(today - timedelta(days=6), today)
+    d = drives(con, week)
+    d = d[d["kwh_per_100km"].notna() & d["start_zone"].notna() & d["end_zone"].notna()]
+    best = None
+    for (start, end), group in d.groupby(["start_zone", "end_zone"]):
+        if len(group) < 2:
+            continue
+        lo, hi = group.loc[group["kwh_per_100km"].idxmin()], group.loc[group["kwh_per_100km"].idxmax()]
+        similar = abs(lo["distance_km"] - hi["distance_km"]) <= 0.15 * hi["distance_km"]
+        gap = 1 - lo["kwh_per_100km"] / hi["kwh_per_100km"]
+        if similar and gap >= 0.05 and (best is None or gap > best[0]):
+            best = (gap, start, end, lo, hi)
+    if best:
+        gap, start, end, lo, hi = best
+        warmer = ""
+        if pd.notna(lo["temp_c"]) and pd.notna(hi["temp_c"]) and lo["temp_c"] > hi["temp_c"]:
+            warmer = f" Same trip, {lo['temp_c'] - hi['temp_c']:.0f} °C warmer."
+        tips.append(
+            (
+                "↯",
+                theme.TINT_CORAL,
+                f"{lo['start_local']:%A}'s {_zones(start, end)} drive used {gap:.0%} less than "
+                f"{hi['start_local']:%A}'s.{warmer}",
+            )
+        )
+    s = _sessions(con, period)
+    total = s["energy_kwh"].sum()
+    if total > 0:
+        home = s.loc[s["zone"] == "home", "energy_kwh"].sum() / total
+        tips.append(("⌂", theme.TINT_SUN, f"{home:.0%} of your charging happened at home."))
+    return tips[:3]

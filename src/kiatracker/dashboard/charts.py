@@ -26,7 +26,7 @@ def house(chart):
     """Morning look: Hanken Grotesk, a quiet solid grid, no frame or axis lines, rounded bar ends.
     Section titles are HTML around the chart, so charts carry no title of their own."""
     return (
-        chart.configure(font=theme.SANS)
+        chart.configure(font=theme.SANS, background="transparent")
         .configure_view(stroke=None)
         .configure_axis(
             domain=False,
@@ -449,4 +449,42 @@ def route_profile(profile: pd.DataFrame, y: str, title: str, y_title: str) -> al
             tooltip=[alt.Tooltip("route:N", title="Route"), _tip("km:Q", "km"), _tip(f"{y}:Q", y_title)],
         )  # fmt: skip
         .properties(height=HEIGHT - 40)
+    )
+
+
+@styled
+def monthly_use(df: pd.DataFrame) -> alt.LayerChart:
+    """kWh/100 km per month; months more than 10 % above the period's mean in coral. Columns: month, kwh."""
+    data = df.dropna(subset=["kwh_per_100km"]).assign(
+        high=lambda d: d["kwh_per_100km"] > 1.1 * d["kwh_per_100km"].mean(),
+    )
+    month_names = alt.Axis(
+        labelAngle=0, labelExpr="timeFormat(toDate(datum.value + '-01'), '%b')", grid=False
+    )
+    base = alt.Chart(data).encode(x=alt.X("month:O", title=None, sort=None, axis=month_names))
+    bars = base.mark_bar(size=34).encode(
+        y=alt.Y("kwh_per_100km:Q", title=None, axis=None),
+        color=alt.condition("datum.high", alt.value(CORAL), alt.value(PALE)),
+        tooltip=[alt.Tooltip("month:O", title="Month"), _tip("kwh_per_100km:Q", "kWh/100 km")],
+    )
+    values = base.mark_text(dy=-8, fontSize=12, color=theme.INK).encode(
+        y="kwh_per_100km:Q", text=alt.Text("kwh_per_100km:Q", format=".1f")
+    )
+    return (bars + values).properties(height=HEIGHT - 60)
+
+
+@styled
+def weekly_distance(df: pd.DataFrame) -> alt.Chart:
+    """km per week; the latest week in coral. Columns: week, distance_km."""
+    data = df.assign(last=df["week"] == df["week"].max())
+    return (
+        alt.Chart(data)
+        .mark_bar()
+        .encode(
+            x=alt.X("week:T", title=None, axis=alt.Axis(grid=False, format="%d %b", labelAngle=0)),
+            y=alt.Y("distance_km:Q", title="km"),
+            color=alt.condition("datum.last", alt.value(CORAL), alt.value(PALE)),
+            tooltip=[_tip("week:T"), _tip("distance_km:Q", "km")],
+        )
+        .properties(height=HEIGHT - 100)
     )

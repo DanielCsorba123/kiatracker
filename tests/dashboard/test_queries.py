@@ -180,3 +180,34 @@ def test_usual_level_never_below_latest_reading(sessions_db):
 def test_usual_level_on_an_empty_database(empty):
     u = q.usual_charge_level(empty, latest_soc=None)
     assert (u.level, u.assumed, u.sessions) == (80, True, 0)
+
+
+def test_monthly_consumption(demo, all_time):
+    m = q.monthly(demo, all_time)
+    assert list(m.columns) == ["month", "distance_km", "kwh_per_100km"] and len(m) >= 2
+    assert m["kwh_per_100km"].between(10, 35).all()
+
+
+def test_commute_pair_is_the_most_frequent_trip(tiny):
+    pair = q.commute_pair(tiny(), Period(date(2026, 11, 1), date(2026, 11, 30)))
+    assert pair == ("home", "other", 50.0)
+
+
+def test_commute_pair_none_without_drives(empty, all_time):
+    assert q.commute_pair(empty, all_time) is None
+
+
+def test_tips_skip_conditions_that_do_not_hold(demo, all_time):
+    warm = [dict(temp_min=12)] * 3
+    tips = q.tips_facts(demo, all_time, warm, date.today())
+    assert all("pre-heat" not in text for _, _, text in tips)
+    assert any("at home" in text for _, _, text in tips)
+
+
+def test_tips_cold_forecast_suggests_preheating(demo, all_time):
+    cold = [dict(temp_min=-2)] + [dict(temp_min=8)] * 2
+    assert any("pre-heat" in text for _, _, text in q.tips_facts(demo, all_time, cold, date.today()))
+
+
+def test_tips_on_an_empty_database(empty, all_time):
+    assert q.tips_facts(empty, all_time, [], date.today()) == []

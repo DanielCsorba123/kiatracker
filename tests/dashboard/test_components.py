@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from kiatracker.dashboard import components
 from kiatracker.dashboard.queries import UsualCharge
 
@@ -94,3 +96,31 @@ def test_whatif_result_bar_against_best_case():
 def test_rule_line_when_no_session_ended_exactly_at_the_median():
     out = components.rule_line(70, UsualCharge(level=85, sessions=20, at_level=0, assumed=False), full=False)
     assert "in 0 of" not in out and "usually stop around 85 %" in out and "last 20 charges" in out
+
+
+@pytest.mark.parametrize(
+    "hour,expected", [(6, "Good morning"), (12, "Good afternoon"), (21, "Good evening"), (2, "Good evening")]
+)
+def test_greeting(hour, expected):
+    assert components.greeting(hour) == expected
+
+
+def test_hero_with_and_without_range():
+    out = components.hero(
+        "Good morning. It's 6 °C with a light west wind.", 384, 352, 411, 76, "Enough for 6 trips."
+    )
+    assert (
+        "384 km" in out and "between 352 and 411" in out and "76 %" in out and components.theme.CORAL in out
+    )
+    assert "enough drives" in components.hero("Good morning.", None, None, None, 76, None)
+
+
+def test_battery_card_shows_missing_values_as_dashes():
+    out = components.battery_card(None, 26418, None, None)
+    assert "26 418 km" in out and "–" in out
+
+
+def test_week_strip_highlights_today_only():
+    rows = [dict(day=date(2026, 11, 9 + i), sky="sun", temp_max=6, range_km=384 + i) for i in range(7)]
+    out = components.week_strip(rows, today=date(2026, 11, 9))
+    assert out.count(components.theme.TINT_CORAL) == 1 and "Today" in out and "390" in out
