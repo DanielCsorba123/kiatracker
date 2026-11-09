@@ -161,6 +161,7 @@ def energy_breakdown(cond: list[Conditions], model: RangeModel) -> dict[str, flo
         parts["drag"] += per * c["aero"] * x.speed_kph**2 * rho
         parts["wind"] += per * c["aero"] * ((x.speed_kph + x.headwind_kph) ** 2 - x.speed_kph**2) * rho
         parts["heating"] += per * c["heat"] * max(0.0, T_BASE - temp) / x.speed_kph
+        parts["heating"] += per * c.get("cold", 0.0) * max(0.0, T_BASE - temp)  # a cold car loses more
         parts["cooling"] += per * c.get("cool", 0.0) * max(0.0, temp - T_COOL) / x.speed_kph
         parts["time"] += per * c.get("time", 0.0) / x.speed_kph
         parts["climb"] += c.get("climb", 0.0) * x.climb_m
@@ -190,7 +191,9 @@ def simulate(cond: list[Conditions], model: RangeModel, samples: int = 1000, see
         + c["heat"] * np.maximum(0.0, T_BASE - temp) / speed
         + c.get("cool", 0.0) * np.maximum(0.0, temp - T_COOL) / speed
         + c.get("time", 0.0) / speed
+        + c["cold"] * np.maximum(0.0, T_BASE - temp)
     )
+    per_100 = np.maximum(per_100, model.floor_kwh_100km)  # never better than the best measured case
     climb, descent = sum(x.climb_m for x in cond), sum(x.descent_m for x in cond)
     hills = (c["climb"] * climb - c["regen"] * descent)[:, 0]
     kwh = (per_100 * km / 100).sum(axis=1) + hills
@@ -201,7 +204,7 @@ def simulate(cond: list[Conditions], model: RangeModel, samples: int = 1000, see
 def coefficient_draws(model: RangeModel, samples: int, rng: np.random.Generator) -> dict[str, np.ndarray]:
     """One coefficient set per simulated day, as (samples, 1) columns: the model's bootstrap refits, or
     for the specs model ±20 % around each value. Every route gets the same sets in the same order."""
-    names = ("c0", "aero", "heat", "cool", "time", "climb", "regen")
+    names = ("c0", "aero", "heat", "cold", "cool", "time", "climb", "regen")
     draws = model.coef_draws or [
         {k: model.coef.get(k, 0.0) * rng.lognormal(0, SPECS_SD) for k in names} for _ in range(200)
     ]

@@ -17,8 +17,9 @@ from pathlib import Path
 import numpy as np
 
 from kiatracker.forecast.features import T_BASE, T_COOL, physics
+from kiatracker.forecast.specs import EV3
 
-FEATURES = ("aero", "heat", "cool", "time", "climb", "regen")
+FEATURES = ("aero", "heat", "cold", "cool", "time", "climb", "regen")
 MIN_DRIVES = 15
 QUANTILES = (0.1, 0.9)
 
@@ -39,19 +40,25 @@ class RangeModel:
     prior_strength: float = 0.0  # how strongly the fit was pulled toward the car-spec physics
     median_km: float = 15.0  # typical training drive: tells measurement noise from model error
     coef_draws: list[dict] = field(default_factory=list)  # bootstrap refits: how sure the coefficients are
+    floor_kwh_100km: float = EV3.best_kwh_per_100km  # no flat-road prediction beats the best measured case
 
     def predict(
         self, speed_kph: float, temp_c: float, airspeed_sq: float, climb: float = 0.0, descent: float = 0.0
     ) -> float:
         """kWh/100 km; climb and descent in metres per 100 km (flat by default)."""
-        x = physics(speed_kph, temp_c, airspeed_sq) | {"climb": climb, "regen": -descent}
-        return self.coef["c0"] + sum(self.coef.get(f, 0.0) * x[f] for f in FEATURES)
+        x = physics(speed_kph, temp_c, airspeed_sq)
+        flat = self.coef["c0"] + sum(self.coef.get(f, 0.0) * x[f] for f in FEATURES if f in x)
+        hills = self.coef.get("climb", 0.0) * climb - self.coef.get("regen", 0.0) * descent
+        return max(flat, self.floor_kwh_100km) + hills
 
     def interval(
         self, speed_kph: float, temp_c: float, airspeed_sq: float, climb: float = 0.0, descent: float = 0.0
     ) -> tuple[float, float, float]:
         mid = self.predict(speed_kph, temp_c, airspeed_sq, climb, descent)
-        return mid + self.residual_q10, mid, mid + self.residual_q90
+        low = max(
+            mid + self.residual_q10, min(mid, self.floor_kwh_100km)
+        )  # the best case stays the best case
+        return low, mid, mid + self.residual_q90
 
     def explain(self, speed_kph: float = 50) -> list[str]:
         v = speed_kph
@@ -62,8 +69,9 @@ class RangeModel:
             f"Air resistance: at {v:.0f} km/h, a 20 km/h headwind adds "
             f"{self.coef['aero'] * ((v + 20) ** 2 - v**2):.1f} kWh/100 km; the same tailwind saves only "
             f"{self.coef['aero'] * (v**2 - (v - 20) ** 2):.1f}, since drag grows with airspeed squared.",
-            f"Cold: at {v:.0f} km/h, each °C below {T_BASE:.0f} °C adds {self.coef['heat'] / v:.2f} "
-            f"kWh/100 km (heating draws power by the hour, so slow cold trips cost the most).",
+            f"Cold: each °C below {T_BASE:.0f} °C adds {self.coef.get('cold', 0.0):.2f} kWh/100 km (a cold "
+            f"battery and tyres) plus {self.coef['heat'] / v:.2f} for heating at {v:.0f} km/h (heating draws "
+            f"power by the hour, so slow cold trips cost the most).",
             f"Heat: each °C above {T_COOL:.0f} °C adds {self.coef.get('cool', 0.0) / v:.2f} kWh/100 km "
             f"for air conditioning at {v:.0f} km/h.",
             f"Hills: each 100 m climbed costs {self.coef.get('climb', 0.0) * 100:.2f} kWh; each 100 m "

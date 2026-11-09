@@ -6,9 +6,10 @@ from kiatracker.dashboard import charts, queries
 from kiatracker.dashboard.ui import empty, number, page_header, tiles
 from kiatracker.dashboard.views.range import fingerprint
 from kiatracker.forecast.scenarios import choose_model, range_grid
+from kiatracker.forecast.specs import EV3
 from kiatracker.forecast.train import car_state
 
-DEFAULT_CAPACITY_KWH = 81.4
+DEFAULT_CAPACITY_KWH = EV3.usable_kwh
 TEMPS = [-10, -5, 0, 5, 10, 15, 20, 25, 30]
 WINDS = [0, 10, 20, 30, 40, 50]
 SPEEDS = {

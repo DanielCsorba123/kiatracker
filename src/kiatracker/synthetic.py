@@ -24,19 +24,20 @@ WORK = (0.13, 0.17)  # offsets in degrees from home
 OUTINGS = [(0.32, -0.22), (-0.28, 0.36), (0.2, 0.42), (-0.35, -0.3)]
 ROAD_TRIPS = [(1.2, -1.6), (-0.4, 2.1), (1.5, 0.9)]  # 150-230 km away
 CAPACITY_KJ = 293040.0
-CAPACITY_KWH = CAPACITY_KJ / 3600
+CAPACITY_KWH = 78.0  # usable: what 0-100 % spans (the car reports the gross 81.4 kWh as capacity)
 POLL = timedelta(minutes=5)
 AC_KW = 11.0
 DC_KW = 120.0
 FORECAST_DAYS = 3
 # true physics: kWh/100 km = c0 + c_aero*(v+h)^2*density + (c_heat*cold + c_cool*hot + c_time) / v,
 # plus c_climb kWh per metre climbed and c_regen kWh back per metre descended
-TRUTH = {
-    "c0": 5.8,
-    "c_aero": 0.00100,
-    "c_heat": 13.0,
-    "c_cool": 11.0,
-    "c_time": 110.0,  # 1.1 kW: electronics, pumps and stop-and-go losses, per hour on the road
+TRUTH = {  # a little thirstier than EV Database's EV3, as a real car with winter tyres would be
+    "c0": 6.5,
+    "c_aero": 0.00098,
+    "c_heat": 3.0,
+    "c_cold": 0.13,  # per km and °C below 18: a cold battery, tyres and drivetrain
+    "c_cool": 13.0,
+    "c_time": 140.0,  # 1.4 kW: electronics, pumps and stop-and-go losses, per hour on the road
     "c_climb": 0.0062,
     "c_regen": 0.0030,
 }
@@ -89,6 +90,7 @@ def true_consumption(speed: float, headwind: float, temp: float) -> float:
         TRUTH["c0"]
         + TRUTH["c_aero"] * (speed + headwind) ** 2 * density
         + (per_hour + TRUTH["c_time"]) / speed
+        + TRUTH["c_cold"] * max(0.0, T_BASE - temp)
     )
 
 

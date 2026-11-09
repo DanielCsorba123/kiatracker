@@ -42,7 +42,7 @@ def test_without_opt_in_the_app_shows_demo(monkeypatch):
     monkeypatch.delenv("KIATRACKER_DEMO", raising=False)
     at = AppTest.from_file(APP, default_timeout=60).run()
     assert not at.exception
-    assert any("simulated" in info.value for info in at.info)
+    assert any("Simulated data" in info.value for info in at.info)
     assert at.title[0].value == "Overview"
 
 
@@ -102,4 +102,4 @@ def test_cloud_entry_point_always_shows_demo(monkeypatch):
     entry = str(Path(APP).parent / "streamlit_app.py")
     at = AppTest.from_file(entry, default_timeout=120).run()
     assert not at.exception
-    assert any("simulated" in info.value for info in at.info)
+    assert any("Simulated data" in info.value for info in at.info)

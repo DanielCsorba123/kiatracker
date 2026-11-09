@@ -25,12 +25,14 @@ from kiatracker.forecast.features import drive_features
 from kiatracker.forecast.model import NotEnoughData, RangeModel
 from kiatracker.forecast.outlook import LOCAL, daily_outlook, fetch_forecast, latest_forecast
 from kiatracker.forecast.scenarios import PRIOR
+from kiatracker.forecast.specs import EV3
 from kiatracker.forecast.train import DEFAULT_SPEED, MODEL_FILE, car_state, train, weather_cell
 from kiatracker.pleos import PleosClient, PleosError
 from kiatracker.prices import download_oil_bulletin, fuel_is_stale, parse_oil_bulletin, store_fuel_prices
 from kiatracker.route_energy import Levers, PlaceNotFound, compare_routes, differences
 from kiatracker.schedule import Job, run_jobs
 from kiatracker.segments import needs
+from kiatracker.showcase import STATUS_FILE, real_data_status, write_status
 from kiatracker.synthetic import FAKE_HOME, FakeTerrain, generate
 from kiatracker.weather import fetch_weather
 
@@ -247,7 +249,7 @@ def cmd_route(settings: Settings, args) -> int:
         with duckdb.connect(str(settings.db_path), read_only=True) as con:
             soc, capacity = car_state(con)
     depart = parse_departure(args.depart, datetime.now(LOCAL))
-    levers = Levers(depart, args.soc or soc or 80.0, capacity or 81.4, args.cap, args.pace / 100)
+    levers = Levers(depart, args.soc or soc or 80.0, capacity or EV3.usable_kwh, args.cap, args.pace / 100)
     vias = [[p.strip() for p in v.split(";") if p.strip()] for v in args.via]
     with httpx.Client() as http:
         terrain = Terrain(settings.dem_dir, lambda name: download_tile(name, http))
@@ -266,6 +268,20 @@ def cmd_route(settings: Settings, args) -> int:
         )
     for line in differences(comparison.estimates):
         print(f"  - {line}")
+    return 0
+
+
+def cmd_showcase_status(settings: Settings, args) -> int:
+    """Aggregates about the real collection for the public demo's banner (no places, times or VIN)."""
+    if not settings.db_path.exists():
+        print("No database: run `kiatracker build` first.")
+        return 1
+    with duckdb.connect(str(settings.db_path), read_only=True) as con:
+        status = real_data_status(con, date.today())
+    print(json.dumps(status, indent=2))
+    if args.write:
+        write_status(status)
+        print(f"Written to {STATUS_FILE}: review it, then commit it.")
     return 0
 
 
@@ -347,6 +363,8 @@ def main(argv: list[str] | None = None) -> int:
     route.add_argument("--soc", type=float, help="charge at departure, %% (default: the car's latest)")
     route.add_argument("--cap", type=float, help="speed cap, km/h")
     route.add_argument("--pace", type=float, default=100, help="your pace vs typical road speeds, %%")
+    showcase = sub.add_parser("showcase-status", help="aggregates about the real data for the public demo")
+    showcase.add_argument("--write", action="store_true", help="save them for the demo banner (then commit)")
     dashboard = sub.add_parser("dashboard", help="open the dashboard in your browser (this computer only)")
     dashboard.add_argument("--demo", action="store_true", help="show generated demo data, not yours")
     dashboard.add_argument("--port", type=int, default=8501)
@@ -374,6 +392,7 @@ def main(argv: list[str] | None = None) -> int:
         "train": cmd_train,
         "forecast": cmd_forecast,
         "route": cmd_route,
+        "showcase-status": cmd_showcase_status,
         "refresh": cmd_refresh,
         "scheduler": cmd_scheduler,
     }

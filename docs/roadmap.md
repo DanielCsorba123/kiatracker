@@ -28,6 +28,12 @@
 4. **Speed curve and anomalies:** consumption against speed at today's temperature; drives far outside their
    interval flagged ("roof box? tyre pressure?").
 
+5. **Finer route terrain:** sample heights every ~100 m instead of at ~1 km piece ends, smooth out viaducts
+   and tunnels (where satellite terrain shows the valley or the hill, not the road), and cap regeneration on
+   steep descents where friction brakes take over.
+6. **Typical traffic:** OSRM uses free-flow speeds; time-of-day slowdowns (e.g. Vienna's Südosttangente at
+   rush hour) would change both the time and the stop-and-go part of the energy.
+
 ## Later
 
 - **Phase C, public showcase:** `kiatracker export-showcase` writes a reviewed, anonymised data set (dates

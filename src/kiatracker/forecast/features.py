@@ -26,6 +26,7 @@ COLUMNS = (
     "headwind_kph",
     "aero",
     "heat",
+    "cold",
     "cool",
     "time",
     "climb",
@@ -46,6 +47,7 @@ def physics(speed_kph: float, temp_c: float, airspeed_sq: float) -> dict:
     return {
         "aero": airspeed_sq * air_density_ratio(temp_c),
         "heat": max(0.0, T_BASE - temp_c) / speed_kph,
+        "cold": max(0.0, T_BASE - temp_c),  # per km: a cold battery, tyres and drivetrain lose more
         "cool": max(0.0, temp_c - T_COOL) / speed_kph,
         "time": 1.0 / speed_kph,
     }
@@ -62,7 +64,7 @@ def segment_features(segments: list[Segment], distance_km: float) -> dict | None
         return None
     total = sum(s.km for s in segments)
     road_factor = distance_km / total if total > 0 else 1.0  # the odometer is the trusted distance
-    sums = dict.fromkeys(("aero", "heat", "cool", "time"), 0.0)
+    sums = dict.fromkeys(("aero", "heat", "cold", "cool", "time"), 0.0)
     temp = headwind = 0.0
     for s in segments:
         speed = max(s.speed_kph * road_factor, MIN_STRETCH_KPH)

@@ -17,6 +17,7 @@ A linear model in physically derived features, fitted per car:
 kWh/100 km = c0                                            rolling resistance, drivetrain
            + c_aero  · (v + headwind)² · ρ(T)/ρ15        air drag on airspeed, denser when cold
            + c_heat  · max(0, 18 − T) / v                 heating power × time per km
+           + c_cold  · max(0, 18 − T)                     a cold battery, tyres and drivetrain, per km
            + c_cool  · max(0, T − 24) / v                 air conditioning × time per km
            + c_time  / v                                  electronics and stop-and-go losses × time per km
            + c_climb · metres climbed per 100 km

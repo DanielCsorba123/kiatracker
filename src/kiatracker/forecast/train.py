@@ -8,7 +8,7 @@ import duckdb
 from kiatracker.forecast.evaluate import backtest
 from kiatracker.forecast.features import drive_features
 from kiatracker.forecast.model import RangeModel, bootstrap, fit
-from kiatracker.forecast.specs import EV3, prior_coefficients
+from kiatracker.forecast.specs import EV3, prior_coefficients, usable_kwh
 
 MODEL_FILE = "models/range.json"
 DEFAULT_SPEED = 50.0
@@ -40,11 +40,11 @@ def train(con: duckdb.DuckDBPyConnection) -> Trained:
 
 
 def car_state(con: duckdb.DuckDBPyConnection) -> tuple[float | None, float | None]:
-    """Latest charge % and battery capacity in kWh."""
+    """Latest charge % and the usable battery capacity in kWh (the car reports its gross size)."""
     row = con.execute(
         "select soc, capacity_kwh from readings_battery where soc is not null order by ts desc limit 1"
     ).fetchone()
-    return (row[0], row[1]) if row else (None, None)
+    return (row[0], usable_kwh(row[1])) if row else (None, None)
 
 
 def weather_cell(

@@ -19,6 +19,7 @@ import duckdb
 from kiatracker.config import Settings
 from kiatracker.elevation import Terrain
 from kiatracker.forecast.outlook import latest_forecast
+from kiatracker.forecast.specs import usable_kwh
 from kiatracker.gold import (
     ChargeWindow,
     ChargingSession,
@@ -41,7 +42,7 @@ from kiatracker.segments import Segment, all_segments
 from kiatracker.silver import load_readings
 from kiatracker.weather import DriveWeather, load_weather, weather_for_drive
 
-DEFAULT_CAPACITY_KWH = 81.4  # EV3 Long Range, used only if no reading reports it
+DEFAULT_CAPACITY_KWH = 81.4  # EV3 Long Range gross, used only if no reading reports it
 INSERT_BATCH = 500
 REPLACE_TRIES = 20
 REPLACE_WAIT_S = 0.5  # on Windows a reader (e.g. the dashboard) blocks replacing the file for a moment
@@ -115,7 +116,7 @@ def write_table(con: duckdb.DuckDBPyConnection, name: str, cls: type, rows: list
 def derive_all(settings: Settings) -> tuple[Readings, list[Drive], list[ChargingSession], list[ChargeWindow]]:
     r = load_readings(settings.raw_dir)
     capacities = [b.capacity_kwh for b in r.battery if b.capacity_kwh]
-    capacity = capacities[-1] if capacities else DEFAULT_CAPACITY_KWH
+    capacity = usable_kwh(capacities[-1] if capacities else DEFAULT_CAPACITY_KWH)  # 0-100 % spans usable
     drives = derive_drives(r, capacity, settings.home, settings.home_radius_km)
     sessions = derive_charging_sessions(r, capacity, settings.home, settings.home_radius_km)
     return r, drives, sessions, derive_charge_windows(sessions, drives, capacity)

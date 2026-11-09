@@ -26,8 +26,9 @@ to compare routes before you drive them.
   trusted (an unseen overnight charge, an impossible reading).
 - **Explains consumption:** each stretch between GPS readings gets the hour's temperature and wind for its
   ~10 km cell, its headwind and its climb from terrain maps.
-- **Models it** with seven interpretable coefficients (rolling, air drag, heating, air conditioning,
-  time-based load, climbing, regeneration),
+- **Models it** with eight interpretable coefficients (rolling, air drag, heating, cold, air conditioning,
+  time-based load, climbing, regeneration), calibrated to the EV3's measured real-world consumption and never
+  predicting more than its best real-world range (672 km in mild town driving),
   starting from the car's specifications and learning from the drives as they come in. A time-ordered
   backtest decides how much to trust each.
 - **Forecasts range** for the coming days' weather, and **compares routes**: energy by cause, arrival charge
@@ -199,6 +200,7 @@ To restore, extract an archive into an empty `data/` and run `kiatracker build`.
 | `kiatracker forecast` | range per day in the forecast weather |
 | `kiatracker route FROM TO [--via "A; B"]… [--depart 08:00] [--soc 90] [--cap 110] [--pace 100]` | compare routes |
 | `kiatracker stats` | summary without coordinates |
+| `kiatracker showcase-status [--write]` | aggregates about the real data for the public demo's banner |
 | `kiatracker dashboard [--demo]` | open the dashboard, local only |
 | `kiatracker demo` | generate and build fake data into `data/demo/` |
 
@@ -230,7 +232,7 @@ Open-Meteo, SRTM, EU fuel prices ─refresh─▶ (cached as raw records and til
 
   ```
   kWh/100 km = c0 + c_aero·(v + headwind)²·ρ(T)
-             + (c_heat·max(0, 18 − T) + c_cool·max(0, T − 24) + c_time) / v
+             + (c_heat·max(0, 18 − T) + c_cool·max(0, T − 24) + c_time) / v + c_cold·max(0, 18 − T)
              + c_climb·up − c_regen·down
   ```
 

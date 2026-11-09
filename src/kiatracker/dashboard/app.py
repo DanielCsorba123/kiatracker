@@ -12,6 +12,7 @@ from kiatracker.dashboard.source import build_demo_database, may_show_personal, 
 from kiatracker.dashboard.ui import BRAND, LOGO, inject_style, sidebar_brand
 from kiatracker.dashboard.views import charging, costs, drives, overview, routes
 from kiatracker.dashboard.views import range as range_page
+from kiatracker.showcase import load_status
 
 PAGES = [
     (overview, "Overview", ":material/dashboard:"),
@@ -28,6 +29,28 @@ def demo_database():
     return build_demo_database()
 
 
+def demo_banner(status: dict | None) -> str:
+    """Simulated data, said plainly, with where the real collection stands."""
+    text = (
+        "**Simulated data.** A year of driving, charging, weather and hills from the project's simulator, "
+        "calibrated to the EV3's measured real-world consumption. Routes are real, priced with the demo "
+        "model."
+    )
+    if not status or not status.get("collecting_since"):
+        return text
+    since = date.fromisoformat(status["collecting_since"])
+    expected = status.get("expected_real_data")
+    when = f"{date.fromisoformat(expected + '-01'):%B %Y}" if expected else "later"
+    updated = date.fromisoformat(status["updated"])
+    return (
+        f"{text}\n\n**The real tracker** has been collecting since {since.day} {since:%B %Y}"
+        f": {status['trustworthy_drives']} trustworthy drives and {status['km']:,} km so far. This site "
+        f"switches to real, anonymised data after {status['target_drives']} drives including "
+        f"{status['target_cold_drives']} cold ones, expected around **{when}** "
+        f"(as of {updated.day} {updated:%b})."
+    )
+
+
 def page_runner(module, db_path, period):
     def run():
         with connect(db_path) as con:
@@ -42,11 +65,7 @@ def main() -> None:
     source = resolve_source(load_settings().db_path)
     if source.demo:
         db_path = demo_database()
-        st.info(
-            "Demo: a year of simulated driving, charging, weather and hills from the project's simulator, "
-            "not a real car. The Routes page plans real routes with the demo model.",
-            icon=":material/science:",
-        )
+        st.info(demo_banner(load_status()), icon=":material/science:")
     elif not may_show_personal(st.get_option("server.address")):
         st.error("Personal data is only shown when the dashboard listens on this computer alone (127.0.0.1).")
         st.stop()

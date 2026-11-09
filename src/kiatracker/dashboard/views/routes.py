@@ -15,6 +15,7 @@ from kiatracker.dashboard.views.drives import cached_model
 from kiatracker.dashboard.views.range import fingerprint
 from kiatracker.elevation import Terrain, download_tile
 from kiatracker.forecast.outlook import LOCAL
+from kiatracker.forecast.specs import EV3
 from kiatracker.forecast.train import car_state
 from kiatracker.route_energy import (
     Comparison,
@@ -25,7 +26,7 @@ from kiatracker.route_energy import (
     energy_breakdown,
 )
 
-DEFAULT_CAPACITY_KWH = 81.4
+DEFAULT_CAPACITY_KWH = EV3.usable_kwh
 CAPS = {"No cap (typical road speeds)": None, "130 km/h": 130.0, "120 km/h": 120.0, "110 km/h": 110.0,
         "100 km/h": 100.0}  # fmt: skip
 RGB = [tuple(int(c[i : i + 2], 16) for i in (1, 3, 5)) for c in charts.ROUTE_COLOURS]
@@ -228,4 +229,4 @@ def render(con, period: queries.Period) -> None:
   cells along the routes go to Open-Meteo. Terrain is read from map tiles stored on this machine.
 """
         )
-    st.caption(f"Battery capacity {number(capacity or DEFAULT_CAPACITY_KWH, 'kWh', 1)}.")
+    st.caption(f"Usable battery {number(capacity or DEFAULT_CAPACITY_KWH, 'kWh', 1)}.")

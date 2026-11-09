@@ -10,12 +10,13 @@ the car's wind resistance to be part of the baseline.
 
 ## Decision
 
-- **Specs model** (`forecast/specs.py`): coefficients computed from the EV3's specifications: mass 1,950 kg,
-  drag coefficient 0.265, frontal area 2.45 m², rolling resistance 0.009, drivetrain efficiency 0.90,
-  a time-based load of 1.0 kW (electronics, pumps and town stop-and-go), heating 0.15 kW per °C below 18 °C,
-  cooling 0.12 kW per °C above 24 °C, 60 % of descent energy regenerated. That gives about c0 = 5.3 kWh/100 km,
-  c_aero = 0.00095, c_heat = 15, c_cool = 12, c_time = 100, c_climb = 0.0059 kWh/m, c_regen = 0.0032 kWh/m,
-  and about 17.6 kWh/100 km at 110 km/h in still, mild air.
+- **Specs model** (`forecast/specs.py`): drag (Cd 0.265, frontal area 2.45 m²), climbing and regeneration
+  (1,950 kg, 60 % back) from the data sheet; the rolling base, time-based load, heating and cold penalty
+  calibrated so that the model reproduces EV Database's real-world consumption for the EV3 Long Range in
+  town and at 110 km/h, in mild and cold weather (11.6, 17.5, 18.6, 24.0 kWh/100 km). Pure data-sheet physics
+  (the first version) predicted 900+ km in slow, warm driving; anchoring to measurements fixed that.
+- **Best-case cap:** no flat-road prediction beats the best measured case (mild city, 672 km on the usable
+  78 kWh). It holds for the fitted model too, so noisy early data can't promise an impossible range.
 - **Ridge pull toward the specs:** the fit adds one pseudo-observation per coefficient, worth `strength`
   average drives, saying "this coefficient equals the specs". The strength is chosen from
   (0, 1, 3, 10, 30, 100) by the backtest. A coefficient the drives say nothing about (an input that never

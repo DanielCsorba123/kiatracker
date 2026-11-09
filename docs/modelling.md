@@ -8,7 +8,8 @@ behind it: [ADR 0006](decisions/0006-physics-informed-model.md),
 
 ## 1. The measurement
 
-Energy of a drive = (SOC at start − SOC at end) / 100 × battery capacity (81.4 kWh). SOC comes in 0.5 % steps,
+Energy of a drive = (SOC at start − SOC at end) / 100 × usable capacity (78.0 kWh: the car reports its gross
+81.4 kWh, but 0–100 % on the dashboard spans the usable part). SOC comes in 0.5 % steps,
 so a single drive's energy is uncertain by about ±0.4 kWh: ±4 kWh/100 km on a 10 km drive, ±0.4 on a 100 km
 one. Hence: consumption only for drives of 5 km or more, distance-weighted fitting, and the reading-noise
 correction for long trips below. Drives with an unseen period or impossible energy are excluded
@@ -20,6 +21,7 @@ correction for long trips below. Drives with an unseen period or impossible ener
 kWh/100 km = c0                                          rolling resistance and drivetrain losses
            + c_aero  · mean[(v + h)² · ρ(T)/ρ15]         air drag on airspeed; ρ(T)/ρ15 = 288.15 / (273.15 + T)
            + c_heat  · mean[max(0, 18 − T) / v]          heating power × hours per km
+           + c_cold  · mean[max(0, 18 − T)]              a cold battery, tyres and drivetrain, per km
            + c_cool  · mean[max(0, T − 24) / v]          air-conditioning power × hours per km
            + c_time  · mean[1 / v]                       electronics, pumps and stop-and-go losses per hour
            + c_climb · metres climbed per 100 km
@@ -36,19 +38,34 @@ factor), headwind `h` and temperature `T`. Squaring per stretch matters: out and
 a mean headwind of zero but costs ((v+w)² + (v−w)²)/2 = v² + w².
 
 **Fit:** distance-weighted least squares with all coefficients ≥ 0 and `c_regen ≤ c_climb`, solved exactly by
-fitting every subset of free coefficients (2⁷ − 1 = 127 small least-squares problems) and keeping the best
+fitting every subset of free coefficients (2⁸ − 1 = 255 small least-squares problems) and keeping the best
 feasible one.
 
-**Prior:** the car's specifications give each coefficient
-(`forecast/specs.py`; mass 1,950 kg, Cd 0.265, A 2.45 m², Crr 0.009, η 0.90, 1.0 kW time-based load, 0.15 kW/°C
-heating, 0.12 kW/°C cooling, 60 % regeneration):
+**Prior** (`forecast/specs.py`): drag, climbing and regeneration come from the data sheet (Cd 0.265, frontal
+area 2.45 m², 1,950 kg, η 0.90, 60 % regeneration). The rolling base, time-based load, heating and cold
+penalty are **calibrated to measured real-world consumption**: EV Database's figures for the EV3 Long Range
+(city and highway at 110 km/h, mild 23 °C without A/C and cold −10 °C with heating; city assumed 30 km/h),
+solved as four linear equations once drag is known. Air conditioning (0.12 kW/°C above 24 °C) isn't in the
+benchmarks and stays a guess.
 
-| | c0 | c_aero | c_heat | c_cool | c_time | c_climb | c_regen |
-|---|---|---|---|---|---|---|---|
-| specs | ≈ 5.3 | ≈ 0.00095 | 15 | 12 | 100 | ≈ 0.0059 kWh/m | ≈ 0.0032 kWh/m |
+| | c0 | c_aero | c_heat | c_cold | c_cool | c_time | c_climb | c_regen |
+|---|---|---|---|---|---|---|---|---|
+| specs | ≈ 6.2 | ≈ 0.00095 | ≈ 2.6 | ≈ 0.12 | 12 | ≈ 137 | ≈ 0.0059 kWh/m | ≈ 0.0032 kWh/m |
 
-That predicts about 740 km at a steady 40 km/h in 30 °C, 470 km at 20 km/h in 35 °C and 390 km at 110 km/h
-around freezing, in line with owners' reports for the EV3.
+| Benchmark (EV Database) | measured | model | range on 78 kWh |
+|---|---|---|---|
+| city, mild | 11.6 | 11.6 | 672 km |
+| city, cold | 17.5 | 17.5 | 446 km |
+| highway 110, mild | 18.6 | 18.6 | 419 km |
+| highway 110, cold | 24.0 | 24.0 | 325 km |
+
+The benchmarks show that most of the cold penalty is per km (about +5.4 to +5.9 kWh/100 km at −10 °C, town or
+motorway), not heating power per hour: a cold battery, tyres and drivetrain are simply less efficient. Hence
+the per-km cold term next to the per-hour heating term.
+
+**Best-case cap:** the mild city figure (11.6 kWh/100 km, 672 km) is the best real-world case for the car,
+so no prediction on flat ground goes below it, including the optimistic end of an interval. Climbing and
+descending are added on top, so a downhill route can still use less.
 
 The fit is pulled toward these values by `strength` pseudo-drives per coefficient (ridge regression toward a
 prior, each penalty row scaled by the feature's mean magnitude so the strength means the same for every
@@ -74,7 +91,7 @@ coefficient). A coefficient whose feature is always zero keeps its prior.
 
 ## 4. Range outlook (Range page, `kiatracker forecast`)
 
-Range = usable energy ÷ predicted kWh/100 km, for the typical speed of the owner's drives and each day's
+Range = usable energy (78 kWh × charge %) ÷ predicted kWh/100 km, for the typical speed of the owner's drives and each day's
 forecast temperature and wind. Without a route, wind averages over all directions: airspeed² = v² + w²/2.
 
 ## 5. Route comparison (Routes page, `kiatracker route`)

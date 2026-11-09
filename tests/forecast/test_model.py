@@ -18,10 +18,15 @@ def row(aero, heat, kwh, km=20.0):
 
 
 def test_recovers_the_simulators_true_physics(demo):
-    model = fit(drive_features(demo))
-    assert model.coef["c0"] == pytest.approx(TRUTH["c0"], rel=0.15)
-    assert model.coef["aero"] == pytest.approx(TRUTH["c_aero"], rel=0.15)
-    assert model.coef["heat"] == pytest.approx(TRUTH["c_heat"], rel=0.15)
+    """The trained model (pulled toward the specs by the backtest's choice) finds the simulator's car. With
+    eight terms, a plain fit on three autumn months can't separate the base from the time and cold terms;
+    the specs prior is what makes them identifiable, as it will be on real data."""
+    from kiatracker.forecast.train import train
+
+    model = train(demo).model
+    for name, truth in (("c0", "c0"), ("aero", "c_aero"), ("time", "c_time"), ("climb", "c_climb")):
+        assert model.coef[name] == pytest.approx(TRUTH[truth], rel=0.15), name
+    assert model.coef["heat"] == pytest.approx(TRUTH["c_heat"], rel=0.5)  # few cold days in the window
 
 
 def test_negative_cost_is_dropped_and_refit():

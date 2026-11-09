@@ -1,0 +1,10 @@
+{
+  "collecting_since": "2026-11-02",
+  "updated": "2026-11-09",
+  "trustworthy_drives": 17,
+  "km": 362,
+  "cold_drives": 1,
+  "target_drives": 60,
+  "target_cold_drives": 10,
+  "expected_real_data": "2026-12"
+}
