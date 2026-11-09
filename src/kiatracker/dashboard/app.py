@@ -7,7 +7,7 @@ from datetime import date
 import streamlit as st
 
 from kiatracker.config import load_settings
-from kiatracker.dashboard.queries import Period, connect
+from kiatracker.dashboard.queries import connect
 from kiatracker.dashboard.source import build_demo_database, may_show_personal, resolve_source
 from kiatracker.dashboard.ui import BRAND, LOGO, demo_strip, inject_style, period_control
 from kiatracker.dashboard.views import charging, costs, drives, overview, routes

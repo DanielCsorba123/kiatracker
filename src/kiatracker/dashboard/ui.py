@@ -1,4 +1,4 @@
-"""Display helpers shared by the pages: the Morning look (CSS), cards, the demo strip and the period control."""
+"""Display helpers shared by the pages: the Morning look (CSS), cards, the demo strip and the period."""
 
 from datetime import date, timedelta
 from pathlib import Path
@@ -36,7 +36,8 @@ h1, h2, h3 {{ font-family: "{t.SERIF}", serif; font-weight: 400; letter-spacing:
     background: {t.CARD}; color: {t.INK}; box-shadow: 0 1px 4px rgba(29,43,58,0.10); font-weight: 600; }}
 
 /* segmented controls as a wash pill with a white active segment */
-[data-testid="stButtonGroup"] {{ background: {t.WASH}; border-radius: 999px; padding: 4px; width: fit-content; }}
+[data-testid="stButtonGroup"] {{ background: {t.WASH}; border-radius: 999px; padding: 4px;
+                                 width: fit-content; }}
 [data-testid="stButtonGroup"] button {{ border: 0; border-radius: 999px; background: transparent;
                                         color: {t.MUTED}; }}
 [data-testid="stButtonGroup"] button[kind$="Active"] {{ background: {t.CARD}; color: {t.INK};
@@ -73,7 +74,8 @@ h1, h2, h3 {{ font-family: "{t.SERIF}", serif; font-weight: 400; letter-spacing:
 .wr-chip.sky {{ background: {t.TINT_SKY}; color: {t.SKY_INK}; }}
 .wr-icons {{ display: flex; flex-direction: column; gap: 14px; }}
 .wr-icons .row {{ display: flex; gap: 12px; align-items: flex-start; }}
-.wr-icons .ic {{ flex: none; width: 34px; height: 34px; border-radius: 12px; display: grid; place-items: center; }}
+.wr-icons .ic {{ flex: none; width: 34px; height: 34px; border-radius: 12px; display: grid;
+                 place-items: center; }}
 .wr-icons p {{ margin: 0; font-size: 15px; line-height: 1.5; color: {t.INK_SOFT}; }}
 .wr-hidden {{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
               white-space: nowrap; }}
