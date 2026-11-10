@@ -200,8 +200,13 @@ def test_route_colours_put_the_chosen_route_in_coral():
     assert charts.ROUTE_COLOURS[:3] == [charts.CORAL, charts.SKY, charts.PALE]
 
 
-def test_weekly_distance_ticks_once_per_week():
-    """With few weeks Vega's own time ticks fall every few hours and repeat the same date."""
-    spec = charts.weekly_distance(DF.rename(columns={"km": "distance_km"})).to_dict()
-    values = spec["encoding"]["x"]["axis"]["values"]
-    assert values == [{"year": 2026, "month": 10, "date": 5}, {"year": 2026, "month": 10, "date": 12}]
+def test_weekly_distance_one_slot_per_week_with_gaps_filled():
+    """A slot per week, so a few weeks give wide bars under their own label instead of hairlines at the edges
+    of a time axis; a week without drives stays visible as an empty slot."""
+    df = pd.DataFrame({"week": pd.to_datetime(["2026-10-19", "2026-11-02"]), "distance_km": [300.0, 120.0]})
+    chart = charts.weekly_distance(df)
+    spec = chart.to_dict()
+    assert spec["encoding"]["x"]["type"] == "ordinal" and spec["encoding"]["x"]["sort"] is None
+    data = chart.data
+    assert list(data["label"]) == ["19 Oct", "26 Oct", "02 Nov"]
+    assert list(data["distance_km"]) == [300.0, 0.0, 120.0] and list(data["last"]) == [False, False, True]

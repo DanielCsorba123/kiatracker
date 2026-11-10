@@ -246,23 +246,33 @@ def monthly_use(df: pd.DataFrame) -> alt.LayerChart:
 
 @styled
 def weekly_distance(df: pd.DataFrame) -> alt.Chart:
-    """km per week; the latest week in coral. Columns: week, distance_km."""
-    data = df.assign(last=df["week"] == df["week"].max())
-    # One tick per week in the data: left alone, Vega ticks every few hours when there are only a few weeks,
-    # and "%d %b" then repeats the same date. Local-time DateTimes, so the ticks sit under the bars.
-    ticks = [alt.DateTime(year=w.year, month=w.month, date=w.day) for w in pd.to_datetime(data["week"])]
+    """km per week; the latest week in coral. Columns: week (the Monday), distance_km.
+
+    One slot per week rather than a time axis: with only a few weeks a time axis draws hairline bars at its
+    edges and repeats dates in the labels. Weeks without drives are filled in with 0 km so gaps stay visible.
+    """
+    week = pd.to_datetime(df["week"])
+    if len(week):
+        weeks = pd.date_range(week.min(), week.max(), freq="7D")
+        data = df.assign(week=week).set_index("week")[["distance_km"]].reindex(weeks, fill_value=0.0)
+        data = data.rename_axis("week").reset_index()
+    else:
+        data = pd.DataFrame({"week": week, "distance_km": df["distance_km"]})
+    data = data.assign(label=data["week"].dt.strftime("%d %b"), last=data["week"] == data["week"].max())
     return (
         alt.Chart(data)
         .mark_bar()
         .encode(
             x=alt.X(
-                "week:T",
+                "label:O",
+                sort=None,
                 title=None,
-                axis=alt.Axis(grid=False, format="%d %b", labelAngle=0, values=ticks, labelOverlap=True),
+                axis=alt.Axis(grid=False, labelAngle=0, labelOverlap=True, ticks=False),
+                scale=alt.Scale(paddingInner=0.3),
             ),
             y=alt.Y("distance_km:Q", title="km"),
             color=alt.condition("datum.last", alt.value(CORAL), alt.value(PALE)),
-            tooltip=[_tip("week:T"), _tip("distance_km:Q", "km")],
+            tooltip=[_tip("week:T", "Week of"), _tip("distance_km:Q", "km")],
         )
         .properties(height=HEIGHT - 100)
     )
