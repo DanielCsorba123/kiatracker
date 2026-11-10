@@ -198,3 +198,10 @@ def test_route_difference_net_and_signs():
 
 def test_route_colours_put_the_chosen_route_in_coral():
     assert charts.ROUTE_COLOURS[:3] == [charts.CORAL, charts.SKY, charts.PALE]
+
+
+def test_weekly_distance_ticks_once_per_week():
+    """With few weeks Vega's own time ticks fall every few hours and repeat the same date."""
+    spec = charts.weekly_distance(DF.rename(columns={"km": "distance_km"})).to_dict()
+    values = spec["encoding"]["x"]["axis"]["values"]
+    assert values == [{"year": 2026, "month": 10, "date": 5}, {"year": 2026, "month": 10, "date": 12}]

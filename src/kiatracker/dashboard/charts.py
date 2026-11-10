@@ -248,11 +248,18 @@ def monthly_use(df: pd.DataFrame) -> alt.LayerChart:
 def weekly_distance(df: pd.DataFrame) -> alt.Chart:
     """km per week; the latest week in coral. Columns: week, distance_km."""
     data = df.assign(last=df["week"] == df["week"].max())
+    # One tick per week in the data: left alone, Vega ticks every few hours when there are only a few weeks,
+    # and "%d %b" then repeats the same date. Local-time DateTimes, so the ticks sit under the bars.
+    ticks = [alt.DateTime(year=w.year, month=w.month, date=w.day) for w in pd.to_datetime(data["week"])]
     return (
         alt.Chart(data)
         .mark_bar()
         .encode(
-            x=alt.X("week:T", title=None, axis=alt.Axis(grid=False, format="%d %b", labelAngle=0)),
+            x=alt.X(
+                "week:T",
+                title=None,
+                axis=alt.Axis(grid=False, format="%d %b", labelAngle=0, values=ticks, labelOverlap=True),
+            ),
             y=alt.Y("distance_km:Q", title="km"),
             color=alt.condition("datum.last", alt.value(CORAL), alt.value(PALE)),
             tooltip=[_tip("week:T"), _tip("distance_km:Q", "km")],
