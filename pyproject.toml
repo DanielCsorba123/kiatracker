@@ -51,7 +51,10 @@ pythonpath = ["tests"]
 [tool.ruff]
 line-length = 110
 src = ["src", "tests"]
-extend-exclude = ["spikes"]  # throwaway API probes, not maintained code
+extend-exclude = [
+    "spikes",  # throwaway API probes, not maintained code
+    "docs/superpowers",  # dated specs and plans: their code snippets are a record, not code to format
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
