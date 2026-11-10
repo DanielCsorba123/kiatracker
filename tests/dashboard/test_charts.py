@@ -210,3 +210,10 @@ def test_weekly_distance_one_slot_per_week_with_gaps_filled():
     data = chart.data
     assert list(data["label"]) == ["19 Oct", "26 Oct", "02 Nov"]
     assert list(data["distance_km"]) == [300.0, 0.0, 120.0] and list(data["last"]) == [False, False, True]
+
+
+def test_weekly_distance_caps_bar_width_only_for_few_weeks():
+    few = pd.DataFrame({"week": pd.to_datetime(["2026-10-26", "2026-11-02"]), "distance_km": [300.0, 120.0]})
+    many = pd.DataFrame({"week": pd.date_range("2025-11-10", periods=53, freq="7D"), "distance_km": 300.0})
+    assert charts.weekly_distance(few).to_dict()["mark"]["size"] == charts.MAX_WEEK_BAR
+    assert "size" not in charts.weekly_distance(many).to_dict()["mark"]

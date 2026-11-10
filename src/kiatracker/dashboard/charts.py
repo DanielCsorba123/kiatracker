@@ -244,6 +244,10 @@ def monthly_use(df: pd.DataFrame) -> alt.LayerChart:
     return (bars + values).properties(height=HEIGHT - 60)
 
 
+FEW_WEEKS = 12
+MAX_WEEK_BAR = 36  # px
+
+
 @styled
 def weekly_distance(df: pd.DataFrame) -> alt.Chart:
     """km per week; the latest week in coral. Columns: week (the Monday), distance_km.
@@ -259,9 +263,11 @@ def weekly_distance(df: pd.DataFrame) -> alt.Chart:
     else:
         data = pd.DataFrame({"week": week, "distance_km": df["distance_km"]})
     data = data.assign(label=data["week"].dt.strftime("%d %b"), last=data["week"] == data["week"].max())
+    # A few weeks would stretch each bar across a third of the card, so their width is capped.
+    width = {"size": MAX_WEEK_BAR} if len(data) < FEW_WEEKS else {}
     return (
         alt.Chart(data)
-        .mark_bar()
+        .mark_bar(**width)
         .encode(
             x=alt.X(
                 "label:O",
