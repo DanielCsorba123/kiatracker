@@ -32,6 +32,8 @@ Rules enforced in code and tests, not by care:
 ## Consequences
 
 - Some features are harder: the map on the Routes page shows only planned routes, never driven ones.
+- The Routes map's tiles come from OpenFreeMap ([0013](0013-maplibre-openfreemap.md)): the browser asks for
+  the tiles in view, as with any web map; no route geometry is sent to the tile server.
 - Weather is slightly less precise than point lookups (one cell is ~10 km across), which matters little for
   temperature and wind.
 - Remote access had to be solved without opening a port: [0011](0011-raspberry-pi-docker-tailscale.md).

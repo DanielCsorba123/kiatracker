@@ -9,7 +9,7 @@
 | Weather | Open-Meteo per drive and per stretch (archive + forecast), home-cell forecast |
 | Terrain | Local SRTM tiles; climb and descent per stretch and per route piece |
 | Model | Physics-informed NNLS with drag, heating, climb and regeneration; car-spec prior with backtest-chosen pull; time-ordered backtest against three references; calibrated intervals |
-| Dashboard | Windrose identity; Overview, Drives (business and analyst views), Charging, Costs (vs petrol, EU fuel prices), Range, Routes |
+| Dashboard | Windrose "Morning" identity (light, Young Serif + Hanken Grotesk, top navigation); Overview with the week's range, Drives with a briefing, Charging, Costs (week / month / year savings vs petrol, EU fuel prices), Range (today's charge, then your usual level), Routes on a real MapLibre map |
 | Routes | OSRM routes and via places, ~1 km pieces with forecast weather and terrain, energy by cause, common-random-numbers Monte Carlo, levers |
 | Operations | Docker image for x86 / arm64; collector and dashboard on a Raspberry Pi; adaptive polling (1 / 5 min); Tailscale Serve access |
 | Learning | Model walkthrough notebook with decisions for the reader |

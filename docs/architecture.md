@@ -25,6 +25,7 @@ flowchart LR
         data -->|read-only| dashboard
     end
     osrm[OSRM + Nominatim] <-->|typed places only| dashboard
+    tiles[OpenFreeMap tiles] -->|map area in view| dashboard
     phone([Owner's devices]) -->|Tailscale HTTPS<br/>tailnet only| dashboard
 ```
 
@@ -110,7 +111,10 @@ src/kiatracker/
    ├─ source.py       fail-closed demo / personal decision
    ├─ queries.py      DuckDB → pandas (no Streamlit)
    ├─ charts.py       pandas → Altair in the house style (no Streamlit)
-   ├─ ui.py           page header, stat tiles, brand
+   ├─ theme.py        the Morning colour tokens and a contrast check
+   ├─ components.py   escaped HTML sections: stat strips, briefing, forecast rows… (no Streamlit)
+   ├─ map.py          the Routes map page (MapLibre + OpenFreeMap), served from static/
+   ├─ ui.py           the Morning stylesheet, cards, demo strip, period control
    └─ views/          overview, drives, charging, costs, range, routes
 ```
 

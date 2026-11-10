@@ -1,23 +1,21 @@
 from dataclasses import dataclass
+from datetime import datetime
 
 import streamlit as st
 
-from kiatracker.dashboard import charts, queries
-from kiatracker.dashboard.ui import empty, number, page_header, tiles
+from kiatracker.dashboard import charts, components, queries
+from kiatracker.dashboard.ui import card, empty, number, render_html
 from kiatracker.dashboard.views.range import fingerprint
+from kiatracker.forecast.outlook import LOCAL
 from kiatracker.forecast.scenarios import choose_model, range_grid
 from kiatracker.forecast.specs import EV3
 from kiatracker.forecast.train import car_state
 
 DEFAULT_CAPACITY_KWH = EV3.usable_kwh
-TEMPS = [-10, -5, 0, 5, 10, 15, 20, 25, 30]
-WINDS = [0, 10, 20, 30, 40, 50]
-SPEEDS = {
-    "Town (40 km/h)": 40,
-    "Country roads (70 km/h)": 70,
-    "Motorway (110 km/h)": 110,
-    "Fast motorway (130 km/h)": 130,
-}
+GRID_TEMPS = [-10, 0, 10, 20, 30]
+GRID_WINDS = [0, 15, 30]
+SPEEDS = {"Town 40": 40, "Country 70": 70, "Motorway 110": 110, "Fast 130": 130}
+DEFAULT_SPEED = "Motorway 110"
 
 
 @dataclass(frozen=True)
@@ -42,54 +40,64 @@ def cached_model(key: tuple, _con):
     return choose_model(_con)
 
 
-def at_a_glance(measured, drives) -> None:
+def at_a_glance(measured, drives) -> str:
     best = measured.loc[measured["kwh_per_100km"].idxmin()] if not measured.empty else None
     worst = measured.loc[measured["kwh_per_100km"].idxmax()] if not measured.empty else None
     avg = (measured["energy_kwh"].sum() / measured["distance_km"].sum() * 100) if not measured.empty else None
-    tiles(
+
+    def when(row) -> str | None:
+        return (
+            f"{row['start_local'].day} {row['start_local']:%b} · {row['distance_km']:.0f} km"
+            if row is not None
+            else None
+        )
+
+    return components.stat_strip(
         [
-            ("Drives", number(len(drives)), None),
+            ("Drives", number(len(drives)), "in this period"),
             ("Distance", number(drives["distance_km"].sum(), "km"), None),
-            ("kWh / 100 km", number(avg, digits=1), "Distance-weighted, drives of 5 km or more."),
-            (
-                "Most efficient",
-                number(best["kwh_per_100km"] if best is not None else None, "kWh", 1),
-                f"{best['start_local']:%d %b}, {best['distance_km']:.0f} km" if best is not None else None,
-            ),
-            (
-                "Least efficient",
-                number(worst["kwh_per_100km"] if worst is not None else None, "kWh", 1),
-                f"{worst['start_local']:%d %b}, {worst['distance_km']:.0f} km" if worst is not None else None,
-            ),
+            ("Average", number(avg, "kWh", 1), "per 100 km, drives of 5 km or more"),
+            ("Best", number(best["kwh_per_100km"] if best is not None else None, "kWh", 1), when(best)),
+            ("Hardest", number(worst["kwh_per_100km"] if worst is not None else None, "kWh", 1), when(worst)),
         ]
     )
 
 
 def what_changes_consumption(con, period) -> None:
-    effects = queries.condition_effects(con, period)
-    st.altair_chart(charts.effect_bars(effects), width="stretch")
-    st.caption(
-        f"Each bar compares your drives in harder conditions with drives in easier ones, energy per km, "
-        f"straight from the data. Grey bars need at least {queries.MIN_PER_SIDE} drives on each side."
-    )
+    with card("effects"):
+        st.html(
+            components.section_title(
+                "What makes a drive cost more",
+                "your drives in harder conditions vs easier ones, energy per km",
+            )
+        )
+        st.html(components.effect_rows(queries.condition_effects(con, period)))
+        st.caption(
+            "Straight from your data, no model: each bar compares drives on the two sides. A bar stays grey "
+            f"until both sides have at least {queries.MIN_PER_SIDE} drives."
+        )
 
 
 def range_in_conditions(con) -> None:
     model, source = cached_model(fingerprint(con), con)
     _, capacity = car_state(con)
-    speed_name = st.segmented_control("Driving", list(SPEEDS), default="Motorway (110 km/h)")
-    speed = SPEEDS[speed_name or "Motorway (110 km/h)"]
-    grid = range_grid(model, capacity or DEFAULT_CAPACITY_KWH, speed, TEMPS, WINDS)
-    st.altair_chart(charts.range_heatmap(grid, f"Range on a full battery at {speed} km/h"), width="stretch")
-    if source == "trained":
-        st.caption(
-            f"From the model trained on your {model.n_drives} drives. Wind is averaged over all directions."
+    with card("grid"):
+        left, right = st.columns([3, 2], vertical_alignment="center")
+        left.html(components.section_title("How far a full battery goes"))
+        choice = right.segmented_control(
+            "Driving", list(SPEEDS), default=DEFAULT_SPEED, label_visibility="collapsed", key="grid-speed"
         )
-    else:
+        speed = SPEEDS[choice or DEFAULT_SPEED]
+        grid = range_grid(model, capacity or DEFAULT_CAPACITY_KWH, speed, GRID_TEMPS, GRID_WINDS)
+        st.html(components.range_grid(grid))
+        who = (
+            f"the model trained on your {model.n_drives} drives"
+            if source == "trained"
+            else "the EV3's specifications until your own model predicts better (see the Range page)"
+        )
         st.caption(
-            "Physics from the EV3's specifications: your own model takes over once it predicts "
-            "better than "
-            "the simple average (see the Range page). Wind is averaged over all directions."
+            f"From {who}, at {speed} km/h. Wind is averaged over all directions. "
+            f"The EV3 can't beat {EV3.best_range_km:.0f} km even in perfect conditions."
         )
 
 
@@ -132,22 +140,28 @@ def for_analysts(con, period, measured, drives) -> None:
 
 
 def render(con, period: queries.Period) -> None:
-    page_header(
-        "Drives", "What makes a drive cheap or expensive, and how far the battery goes in any weather."
+    render_html(components.hidden_title("Drives"))
+    today = datetime.now(LOCAL).date()
+    render_html(
+        components.briefing(queries.briefing_facts(con, period, today), f"{today:%A} {today.day} {today:%B}")
     )
     drives = queries.drives(con, period)
     if drives.empty:
         empty("No drives in this period yet.")
         return
     measured = drives.dropna(subset=["kwh_per_100km"])
-    at_a_glance(measured, drives)
+    render_html(at_a_glance(measured, drives))
     what_changes_consumption(con, period)
-    st.subheader("Range in different conditions")
     range_in_conditions(con)
-    if not measured.dropna(subset=["temp_c"]).empty:
-        st.altair_chart(charts.drive_log(measured), width="stretch")
-        st.caption(
-            "Each dot is a drive: higher means more energy per km, bigger means longer, "
-            "blue cold, orange warm."
-        )
+    if not measured.empty:
+        with card("year"):
+            st.html(
+                components.section_title(
+                    "Every drive", "coral = 19 kWh/100 km or more · line = the seasonal average"
+                )
+            )
+            st.altair_chart(charts.drives_over_year(measured), width="stretch")
+    with card("recent"):
+        st.html(components.section_title("Recent drives", "every drive is in the full table below"))
+        st.html(components.drive_list(queries.recent_drives(con, today)))
     for_analysts(con, period, measured, drives)

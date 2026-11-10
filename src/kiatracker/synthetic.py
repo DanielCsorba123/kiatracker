@@ -28,7 +28,7 @@ CAPACITY_KWH = 78.0  # usable: what 0-100 % spans (the car reports the gross 81.
 POLL = timedelta(minutes=5)
 AC_KW = 11.0
 DC_KW = 120.0
-FORECAST_DAYS = 3
+FORECAST_DAYS = 7  # as many days as the real forecast fetches
 # true physics: kWh/100 km = c0 + c_aero*(v+h)^2*density + (c_heat*cold + c_cool*hot + c_time) / v,
 # plus c_climb kWh per metre climbed and c_regen kWh back per metre descended
 TRUTH = {  # a little thirstier than EV Database's EV3, as a real car with winter tyres would be
@@ -67,7 +67,15 @@ class DayWeather:
             "wind_speed_10m": [w for _, w in hours],
             "wind_direction_10m": [round(self.wind_from, 1)] * 24,
             "wind_gusts_10m": [round(self.wind * 1.6, 1)] * 24,
+            "cloud_cover": [self.cloud] * 24,
+            "precipitation_probability": [max(0.0, min(80.0, self.cloud - 35))] * 24,
         }
+
+    @property
+    def cloud(self) -> float:
+        """Cloud cover %: windier and colder days are greyer; deterministic, so the demo stays repeatable."""
+        swing = 15 * math.sin(math.radians(self.wind_from))
+        return float(round(min(90.0, max(10.0, 30 + 2.2 * self.wind - 1.2 * self.temp + swing))))
 
 
 def fake_elevation(lat: float, lon: float) -> float:

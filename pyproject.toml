@@ -35,6 +35,10 @@ dev = [
     "respx>=0.21",
     "ruff>=0.6",
 ]
+screenshots = [  # scripts/capture_screenshots.py only
+    "playwright>=1.47",
+    "pillow>=10",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -51,3 +55,7 @@ extend-exclude = ["spikes"]  # throwaway API probes, not maintained code
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/kiatracker/dashboard/ui.py" = ["E501"]  # one long CSS block reads better unwrapped
+"src/kiatracker/dashboard/map.py" = ["E501"]  # an embedded HTML + JavaScript page

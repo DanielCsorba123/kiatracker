@@ -138,3 +138,10 @@ def test_descents_never_give_back_more_than_climbs_cost():
                     | {"climb": climb, "regen": -descent})  # fmt: skip
     coef = fit_coefficients(rows)
     assert coef["regen"] <= coef["climb"]
+
+
+def test_explain_items_are_four_sentences_from_the_coefficients(demo):
+    model = fit(drive_features(demo))
+    items = model.explain_items(62)
+    assert [icon for icon, _ in items] == ["❄", "↗", "≋", "☀"]
+    assert f"{model.coef['cold']:.2f}" in items[0][1]

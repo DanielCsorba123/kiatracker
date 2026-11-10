@@ -42,8 +42,9 @@ def test_without_opt_in_the_app_shows_demo(monkeypatch):
     monkeypatch.delenv("KIATRACKER_DEMO", raising=False)
     at = AppTest.from_file(APP, default_timeout=60).run()
     assert not at.exception
-    assert any("Simulated data" in info.value for info in at.info)
-    assert at.title[0].value == "Overview"
+    assert any("Simulated data" in md.value for md in at.markdown)
+    assert not at.sidebar.children  # navigation sits at the top; there is no sidebar any more
+    assert not at.info  # the demo notice is a slim strip, not an info box
 
 
 def test_personal_mode_refuses_when_reachable_from_the_network(monkeypatch, tmp_path, listen):
@@ -66,11 +67,22 @@ def test_personal_mode_without_database_shows_build_hint(monkeypatch, tmp_path, 
     assert any("kiatracker build" in warning.value for warning in at.warning)
 
 
+def heading(at: AppTest) -> str:
+    """The page's h1: Streamlit's title, or the hidden h1 the Morning pages render as HTML."""
+    if at.title:
+        return at.title[0].value
+    for element in at.get("html"):
+        body = element.proto.body
+        if body.startswith('<h1 class="wr-hidden">'):
+            return body.removeprefix('<h1 class="wr-hidden">').removesuffix("</h1>")
+    return ""
+
+
 @pytest.mark.parametrize("page", PAGES)
 def test_page_renders_demo_data(page, demo_db):
     at = run_page(page, demo_db)
     assert not at.exception
-    assert at.title[0].value == page.capitalize()
+    assert heading(at) == page.capitalize()
 
 
 @pytest.mark.parametrize("page", PAGES)
@@ -102,4 +114,10 @@ def test_cloud_entry_point_always_shows_demo(monkeypatch):
     entry = str(Path(APP).parent / "streamlit_app.py")
     at = AppTest.from_file(entry, default_timeout=120).run()
     assert not at.exception
-    assert any("Simulated data" in info.value for info in at.info)
+    assert any("Simulated data" in md.value for md in at.markdown)
+
+
+def test_period_control_only_on_pages_that_use_a_period():
+    from kiatracker.dashboard.ui import PERIOD_PAGES
+
+    assert PERIOD_PAGES == {"overview", "drives", "charging", "costs"}

@@ -78,6 +78,31 @@ class RangeModel:
             f"downhill gives back {self.coef.get('regen', 0.0) * 100:.2f} kWh through regenerative braking.",
         ]
 
+    def explain_items(self, speed_kph: float = 50) -> list[tuple[str, str]]:
+        """What the model has learned, as (icon, sentence) for the dashboard; computed, never hard-coded."""
+        c, v = self.coef, speed_kph
+        climb, regen = c.get("climb", 0.0), c.get("regen", 0.0)
+        back = f"; going down gives back about {regen / climb:.0%} of it" if climb > 0 else ""
+        return [
+            (
+                "❄",
+                f"Every degree below {T_BASE:.0f} °C adds about {c.get('cold', 0.0):.2f} kWh/100 km, plus "
+                f"{c['heat'] / v:.2f} for the heater at {v:.0f} km/h.",
+            ),
+            ("↗", f"Climbing 100 m costs about {climb * 100:.1f} kWh{back}."),
+            (
+                "≋",
+                f"At 110 km/h, a 20 km/h headwind adds about {c['aero'] * (130**2 - 110**2):.1f} kWh/100 km: "
+                "air drag grows with the square of the airspeed.",
+            ),
+            (
+                "☀",
+                "At 30 °C the air conditioning costs about "
+                f"{c.get('cool', 0.0) * (30 - T_COOL) / 100:.1f} kWh "
+                "per hour of driving.",
+            ),
+        ]
+
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")

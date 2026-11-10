@@ -14,8 +14,10 @@ must be cheap to build and change, and still testable.
 - Three layers: `queries.py` (DuckDB → DataFrame) and `charts.py` (DataFrame → chart) import no Streamlit and
   are unit-tested; pages in `dashboard/views/` are thin `render(con, period)` functions, smoke-tested headless
   with Streamlit's `AppTest`.
-- A house style ("Windrose"): self-hosted Inter and Space Grotesk, a wind-rose logo, one decorator
-  (`charts.styled`) applying fonts, a recessive dashed grid and no chart frames; light and dark themes.
+- A house style applied by one decorator (`charts.styled`) and one stylesheet. *Revised November 2026:* the
+  "Morning" identity replaced the first look (Inter, Space Grotesk, light and dark): one light theme, Young
+  Serif and Hanken Grotesk, colour tokens in `dashboard/theme.py`, HTML sections from `dashboard/components.py`
+  ([spec](../superpowers/specs/2026-11-09-morning-redesign-design.md)).
 - Expensive work is cached by a fingerprint of the data (model training, route comparisons for an hour).
 - Pages call external services only on an explicit action (the Routes page's Compare button).
 

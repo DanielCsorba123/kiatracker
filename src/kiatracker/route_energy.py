@@ -284,6 +284,29 @@ def differences(estimates: list[RouteEstimate]) -> list[str]:
     return lines
 
 
+def rival_first(estimates: list[RouteEstimate]) -> list[RouteEstimate]:
+    """The first route, then its closest rival in energy, then the rest: the pair worth comparing leads."""
+    if len(estimates) < 3:
+        return list(estimates)
+    first, rest = estimates[0], estimates[1:]
+    rival = min(rest, key=lambda e: abs(e.kwh_p50 - first.kwh_p50))
+    return [first, rival, *(e for e in rest if e is not rival)]
+
+
+def win_shares(estimates: list[RouteEstimate]) -> list[float]:
+    """How often each route uses the least energy over the same simulated days; ties are split evenly.
+
+    Without simulated days, the route with the lowest median takes it all."""
+    if not estimates:
+        return []
+    if any(e.draws is None for e in estimates):
+        best = min(range(len(estimates)), key=lambda i: estimates[i].kwh_p50)
+        return [1.0 if i == best else 0.0 for i in range(len(estimates))]
+    draws = np.vstack([e.draws for e in estimates])
+    lowest = draws == draws.min(axis=0)
+    return [float(x) for x in (lowest / lowest.sum(axis=0)).mean(axis=1)]
+
+
 class PlaceNotFound(LookupError):
     pass
 

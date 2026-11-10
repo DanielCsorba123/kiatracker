@@ -95,7 +95,7 @@ def test_costs_arithmetic(tiny):
     with tiny() as con:
         [row] = q.costs(con, Period(date(2026, 11, 1), date(2026, 11, 30)), assume).to_dict("records")
     grid_kwh = 15 / 0.9  # 15 kWh into the battery over 100 km, 10 % lost on the way
-    assert row["month"] == "2026-11" and row["distance_km"] == 100
+    assert row["bucket"] == "2026-11" and row["distance_km"] == 100
     assert row["ev_huf"] == pytest.approx(grid_kwh * 70.0)
     assert row["petrol_huf"] == pytest.approx(6.5 * 640)  # November's average Hungarian petrol price
     assert row["diesel_huf"] == pytest.approx(5.0 * 700)
@@ -158,3 +158,135 @@ def test_condition_effects_say_when_there_is_not_enough_data(tiny):
     with tiny() as con:
         effects = q.condition_effects(con, Period(date(2026, 11, 1), date(2026, 11, 30)))
     assert not effects["enough"].any()
+
+
+def test_usual_level_is_median_of_slow_sessions_rounded(sessions_db):
+    con = sessions_db(ends=[79, 80, 81, 80, 78, 100], kw=[7.4] * 6)
+    u = q.usual_charge_level(con, latest_soc=40)
+    assert (u.level, u.assumed, u.sessions) == (80, False, 6) and u.at_level == 5
+
+
+def test_dc_sessions_are_ignored_and_few_sessions_fall_back(sessions_db):
+    con = sessions_db(ends=[100, 100, 90, 80], kw=[96, 88, 7.4, 7.4])
+    u = q.usual_charge_level(con, latest_soc=40)
+    assert (u.level, u.assumed) == (80, True)
+
+
+def test_usual_level_never_below_latest_reading(sessions_db):
+    con = sessions_db(ends=[80] * 6, kw=[7.4] * 6)
+    assert q.usual_charge_level(con, latest_soc=95).level == 95
+
+
+def test_usual_level_on_an_empty_database(empty):
+    u = q.usual_charge_level(empty, latest_soc=None)
+    assert (u.level, u.assumed, u.sessions) == (80, True, 0)
+
+
+def test_monthly_consumption(demo, all_time):
+    m = q.monthly(demo, all_time)
+    assert list(m.columns) == ["month", "distance_km", "kwh_per_100km"] and len(m) >= 2
+    assert m["kwh_per_100km"].between(10, 35).all()
+
+
+def test_commute_pair_is_the_most_frequent_trip(tiny):
+    pair = q.commute_pair(tiny(), Period(date(2026, 11, 1), date(2026, 11, 30)))
+    assert pair == ("home", "other", 50.0)
+
+
+def test_commute_pair_none_without_drives(empty, all_time):
+    assert q.commute_pair(empty, all_time) is None
+
+
+def test_tips_skip_conditions_that_do_not_hold(demo, all_time):
+    warm = [dict(temp_min=12)] * 3
+    tips = q.tips_facts(demo, all_time, warm, date.today())
+    assert all("pre-heat" not in text for _, _, text in tips)
+    assert any("at home" in text for _, _, text in tips)
+
+
+def test_tips_cold_forecast_suggests_preheating(demo, all_time):
+    cold = [dict(temp_min=-2)] + [dict(temp_min=8)] * 2
+    assert any("pre-heat" in text for _, _, text in q.tips_facts(demo, all_time, cold, date.today()))
+
+
+def test_tips_on_an_empty_database(empty, all_time):
+    assert q.tips_facts(empty, all_time, [], date.today()) == []
+
+
+NOV = Period(date(2026, 11, 1), date(2026, 11, 30))
+
+
+def test_briefing_facts_empty_week_gives_nothing(empty, all_time):
+    assert q.briefing_facts(empty, all_time, date.today()) == []
+
+
+def test_briefing_skips_comparison_without_last_week(tiny):
+    titles = [t for _, _, t, _ in q.briefing_facts(tiny(), NOV, date(2026, 11, 9))]  # 3 Nov only
+    assert "A better week" not in titles and "A harder week" not in titles
+    assert "Best drive" in titles
+
+
+def test_briefing_compares_with_last_week(tiny):
+    facts = q.briefing_facts(tiny(), NOV, date(2026, 11, 16))  # 10 Nov this week, 3 Nov the week before
+    titles = [t for _, _, t, _ in facts]
+    assert "A better week" in titles or "A harder week" in titles
+
+
+def test_recent_drives_label_days(tiny):
+    df = q.recent_drives(tiny(), today=date(2026, 11, 10))
+    assert list(df["day_label"]) == ["Today", "Tue 3 Nov"]
+    assert {"time", "start_zone", "end_zone", "distance_km", "kwh_per_100km", "temp_c"} <= set(df.columns)
+
+
+def test_plug_hours_has_all_24_hours(demo, all_time):
+    df = q.plug_hours(demo, all_time)
+    assert list(df["hour"]) == list(range(24))
+    assert df["sessions"].sum() == len(q.charging_sessions(demo, all_time))
+
+
+def test_plug_hours_empty(empty, all_time):
+    assert q.plug_hours(empty, all_time)["sessions"].sum() == 0
+
+
+@pytest.mark.parametrize("freq", ["week", "month", "year"])
+def test_cost_buckets_sum_to_the_same_total(demo, all_time, freq):
+    assume = q.CostAssumptions()
+    month = q.costs(demo, all_time, assume, "month")
+    other = q.costs(demo, all_time, assume, freq)
+    assert other["petrol_huf"].sum() == pytest.approx(month["petrol_huf"].sum())
+    assert other["ev_huf"].sum() == pytest.approx(month["ev_huf"].sum())
+    assert other["bucket"].is_unique
+
+
+def test_week_buckets_are_iso_weeks(tiny):
+    c = q.costs(tiny(), Period(date(2026, 11, 1), date(2026, 11, 30)), q.CostAssumptions(), "week")
+    assert list(c["bucket"]) == ["2026-W45", "2026-W46"]
+
+
+def test_current_bucket_is_marked_incomplete(demo, all_time):
+    s = q.savings(q.costs(demo, all_time, q.CostAssumptions(), "month"), "month", date.today())
+    assert not s["complete"].iloc[-1] and s["complete"].iloc[:-1].all()
+    assert (s["saved_huf"] == s["petrol_huf"] - s["ev_huf"]).all()
+
+
+def test_bucket_labels():
+    assert q.bucket_label("2026-W45", "week") == "the week of 2 Nov"
+    assert q.bucket_label("2026-10", "month") == "October"
+    assert q.bucket_label("2025", "year") == "2025"
+
+
+def test_usual_level_clamped_to_the_latest_reading_says_so(sessions_db):
+    con = sessions_db(ends=[70] * 6, kw=[7.4] * 6)
+    u = q.usual_charge_level(con, latest_soc=88.6)
+    assert (u.level, u.clamped, u.assumed) == (89, True, False)
+
+
+def test_few_sessions_but_a_high_reading_is_clamped_not_assumed(sessions_db):
+    con = sessions_db(ends=[80, 80, 80], kw=[7.4] * 3)
+    u = q.usual_charge_level(con, latest_soc=90)
+    assert (u.level, u.clamped) == (90, True)
+
+
+def test_tips_skip_the_home_share_without_zones(sessions_db, all_time):
+    con = sessions_db(ends=[80] * 6, kw=[7.4] * 6, zone=None)
+    assert all("at home" not in text for _, _, text in q.tips_facts(con, all_time, [], date.today()))
