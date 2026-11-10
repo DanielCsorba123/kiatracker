@@ -327,7 +327,10 @@ def plan_day(day: datetime, rng: random.Random, road_trip: bool) -> list[tuple]:
 def generate(raw_dir: Path, start: datetime, days: int, seed: int = 7) -> list[dict]:
     """Write fake raw files; return the true drives (start, end, distance_km) to test the pipeline with."""
     rng = random.Random(seed)
-    climate = make_climate(start, days + FORECAST_DAYS, rng)
+    # the forecast days get their own stream, so their number never reshuffles the simulated history
+    climate = make_climate(start, days, rng) + make_climate(
+        start + timedelta(days=days), FORECAST_DAYS, random.Random(seed + 1)
+    )
 
     def weather(ts: datetime) -> tuple[float, float, float]:
         """Temperature, wind and direction at the hour nearest ts, exactly as the model will see them."""
