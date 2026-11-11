@@ -1,0 +1,6 @@
+[Unit]
+Description=Bring the Wi-Fi back if the Pi has lost the network
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/wifi-watchdog

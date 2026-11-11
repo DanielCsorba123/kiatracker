@@ -125,6 +125,11 @@ docker compose logs -f collector
 
 To update later: `git pull && docker compose --profile collector up -d --build collector dashboard`.
 
+On a Raspberry Pi on Wi-Fi, also run `sudo sh deploy/pi/install.sh` once. The Pi's onboard Wi-Fi can hang
+while Linux keeps running, and readings missed while it's offline are lost for good. The script adds a
+watchdog that reloads the Wi-Fi driver after about 6 minutes offline and reboots after 12 (at most once an
+hour). It also keeps the system log across reboots, so the cause of an outage can be found afterwards.
+
 <details>
 <summary>On a Windows PC instead (Task Scheduler)</summary>
 
